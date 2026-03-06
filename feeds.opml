@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<opml version="1.0">
+    <head>
+        <title>My Feed Subscriptions</title>
+    </head>
+    <body>
+        <outline text="AI Labs &amp; Research" title="AI Labs &amp; Research">
+            <outline type="rss" text="Sebastian Raschka" title="Sebastian Raschka" xmlUrl="https://magazine.sebastianraschka.com/feed" htmlUrl="https://magazine.sebastianraschka.com"/>
+            <outline type="rss" text="Anthropic Research" title="Anthropic Research" xmlUrl="https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_research.xml" htmlUrl="https://anthropic.com/research/feed_anthropic_research.xml"/>
+            <outline type="rss" text="Cameron Wolfe - Deep Dive" title="Cameron Wolfe - Deep Dive" xmlUrl="https://cameronrwolfe.substack.com/feed" htmlUrl="https://cameronrwolfe.substack.com"/>
+            <outline type="rss" text="BAIR Blog (Berkeley AI Research)" title="BAIR Blog (Berkeley AI Research)" xmlUrl="https://bair.berkeley.edu/blog/feed.xml" htmlUrl="http://bair.berkeley.edu/blog/"/>
+            <outline type="rss" text="MIT News - AI" title="MIT News - AI" xmlUrl="https://news.mit.edu/rss/topic/artificial-intelligence2" htmlUrl="https://news.mit.edu/rss/topic/artificial-intelligence2"/>
+            <outline type="rss" text="Anthropic Engineering" title="Anthropic Engineering" xmlUrl="https://raw.githubusercontent.com/conoro/anthropic-engineering-rss-feed/main/anthropic_engineering_rss.xml" htmlUrl="https://raw.githubusercontent.com/conoro/anthropic-engineering-rss-feed/main/anthropic_engineering_rss.xml"/>
+            <outline type="rss" text="Claude Code Changelog" title="Claude Code Changelog" xmlUrl="https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_changelog_claude_code.xml" htmlUrl="https://anthropic.com/feed_anthropic_changelog_claude_code.xml"/>
+            <outline type="rss" text="OpenAI Blog" title="OpenAI Blog" xmlUrl="https://openai.com/news/rss.xml" htmlUrl="https://openai.com/news"/>
+            <outline type="rss" text="Simon Willison" title="Simon Willison" xmlUrl="https://simonwillison.net/atom/everything/" htmlUrl="http://simonwillison.net/"/>
+            <outline type="rss" text="The Gradient" title="The Gradient" xmlUrl="https://thegradient.pub/rss/" htmlUrl="https://thegradient.pub/"/>
+            <outline type="rss" text="Anthropic Engineering Blog" title="Anthropic Engineering Blog" xmlUrl="https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_engineering.xml" htmlUrl="https://anthropic.com/engineering/feed_anthropic_engineering.xml"/>
+            <outline type="rss" text="Anthropic News" title="Anthropic News" xmlUrl="https://raw.githubusercontent.com/taobojlen/anthropic-rss-feed/main/anthropic_news_rss.xml" htmlUrl="https://raw.githubusercontent.com/taobojlen/anthropic-rss-feed/main/anthropic_news_rss.xml"/>
+            <outline type="rss" text="Hugging Face Blog" title="Hugging Face Blog" xmlUrl="https://huggingface.co/blog/feed.xml" htmlUrl="https://huggingface.co/blog"/>
+            <outline type="rss" text="Microsoft Research" title="Microsoft Research" xmlUrl="https://www.microsoft.com/en-us/research/feed/" htmlUrl="https://www.microsoft.com/en-us/research/"/>
+            <outline type="rss" text="Google DeepMind" title="Google DeepMind" xmlUrl="https://deepmind.google/blog/rss.xml" htmlUrl="https://deepmind.google/blog/"/>
+        </outline>
+        <outline text="Journals" title="Journals">
+            <outline type="rss" text="PNAS Physics" title="PNAS Physics" xmlUrl="http://www.pnas.org/rss/Physics.xml" htmlUrl="https://www.pnas.org/action/doSearch?af=R"/>
+            <outline type="rss" text="Nature Computational Science" title="Nature Computational Science" xmlUrl="http://feeds.nature.com/natcomputsci/rss/current" htmlUrl="http://feeds.nature.com/natcomputsci/rss/current"/>
+            <outline type="rss" text="Recent Articles in Phys. Rev. Materials" title="Recent Articles in Phys. Rev. Materials" xmlUrl="http://feeds.aps.org/rss/recent/prmaterials.xml" htmlUrl="http://journals.aps.org/prmaterials/"/>
+            <outline type="rss" text="Nature Nanotechnology" title="Nature Nanotechnology" xmlUrl="https://www.nature.com/nnano.rss" htmlUrl="http://feeds.nature.com/nnano/rss/current"/>
+            <outline type="rss" text="Science Magazine" title="Science Magazine" xmlUrl="http://www.sciencemag.org/rss/current.xml" htmlUrl="https://www.science.org/journal/science"/>
+            <outline type="rss" text="Nature" title="Nature" xmlUrl="http://www.nature.com/nature/current_issue/rss" htmlUrl="http://feeds.nature.com/nature/rss/current"/>
+            <outline type="rss" text="Nature Reviews Physics" title="Nature Reviews Physics" xmlUrl="http://feeds.nature.com/natrevphys/rss/current" htmlUrl="http://feeds.nature.com/natrevphys/rss/current"/>
+            <outline type="rss" text="Journal Club for Condensed Matter Physics" title="Journal Club for Condensed Matter Physics" xmlUrl="https://www.condmatjclub.org/?feed=rss2" htmlUrl="https://www.condmatjclub.org/"/>
+            <outline type="rss" text="Nature Machine Intelligence" title="Nature Machine Intelligence" xmlUrl="http://feeds.nature.com/natmachintell/rss/current" htmlUrl="http://feeds.nature.com/natmachintell/rss/current"/>
+            <outline type="rss" text="RMP" title="RMP" xmlUrl="http://feeds.aps.org/rss/recent/rmp.xml" htmlUrl="http://journals.aps.org/rmp/"/>
+            <outline type="rss" text="Physical sciences : Nature Communications subject feeds" title="Physical sciences : Nature Communications subject feeds" xmlUrl="https://www.nature.com/subjects/physical-sciences/ncomms.rss" htmlUrl="https://www.nature.com/subjects/physical-sciences/ncomms"/>
+            <outline type="rss" text="Nature Reviews Materials" title="Nature Reviews Materials" xmlUrl="http://feeds.nature.com/natrevmats/rss/current" htmlUrl="http://feeds.nature.com/natrevmats/rss/current"/>
+            <outline type="rss" text="cond-mat updates on arXiv.org" title="cond-mat updates on arXiv.org" xmlUrl="http://arxiv.org/rss/cond-mat" htmlUrl="http://rss.arxiv.org/rss/cond-mat"/>
+            <outline type="rss" text="Science First Release" title="Science First Release" xmlUrl="http://www.sciencemag.org/rss/express.xml" htmlUrl="https://www.science.org/journal/science"/>
+            <outline type="rss" text="PRB" title="PRB" xmlUrl="http://feeds.aps.org/rss/recent/prb.xml" htmlUrl="http://journals.aps.org/prb/"/>
+            <outline type="rss" text="PRL" title="PRL" xmlUrl="http://feeds.aps.org/rss/recent/prl.xml" htmlUrl="http://journals.aps.org/prl/"/>
+            <outline type="rss" text="Nature Physics" title="Nature Physics" xmlUrl="http://www.nature.com/nphys/current_issue/rss/" htmlUrl="http://feeds.nature.com/nphys/rss/current"/>
+            <outline type="rss" text="Nature Materials" title="Nature Materials" xmlUrl="http://www.nature.com/nmat/current_issue/rss/" htmlUrl="http://feeds.nature.com/nmat/rss/current"/>
+            <outline type="rss" text="PRX" title="PRX" xmlUrl="http://feeds.aps.org/rss/recent/prx.xml" htmlUrl="http://journals.aps.org/prx/"/>
+        </outline>
+    </body>
+</opml>

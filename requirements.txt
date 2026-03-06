@@ -1,0 +1,4 @@
+feedparser>=6.0
+anthropic>=0.40
+slack-sdk>=3.27
+pyyaml>=6.0
