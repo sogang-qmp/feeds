@@ -122,23 +122,6 @@ opportunity_filters:
     - chemistry wet lab
 
 # ============================================================
-# Scoring Guidance (for LLM-based relevance scoring)
-# ============================================================
-scoring_prompt: |
-  You are evaluating whether a job/opportunity posting is relevant to this
-  researcher's profile. Be GENEROUS — if there is any reasonable connection
-  to the researcher's interests, methods, or materials systems, include it.
-
-  Scoring scale (1-5):
-    5: Direct match (e.g., "postdoc in electron-phonon coupling / DFT")
-    4: Strong overlap (e.g., "computational condensed matter" without specific subtopic)
-    3: Moderate overlap (e.g., "2D materials experimentalist seeking theory collaborator")
-    2: Weak but plausible (e.g., "physics faculty position, computational welcome")
-    1: Tangential (e.g., "materials science broadly, no computational focus")
-
-  Recommend if score >= 2.
-
-# ============================================================
 # Update Strategy
 # ============================================================
 # See notes below on how to keep this profile current.
