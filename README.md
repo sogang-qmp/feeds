@@ -11,7 +11,7 @@ feeds.opml → [fetch] → SQLite DB → [curate] → HTML + Slack notification
 - **`fetch`** — Parses OPML, fetches all RSS entries, stores in SQLite (deduped by link)
 - **`curate`** — Scores uncurated articles with Haiku (1-5), generates static HTML grouped by OPML folder/feed order, sends link to Slack
 
-HTML is served at `https://example.com/feeds/` via nginx.
+HTML is served as static files via nginx (see `nginx-feeds.conf`).
 
 ## Setup
 
@@ -23,28 +23,19 @@ pip install -r requirements.txt
 
 ### 2. Prepare `feeds.opml`
 
-Export your RSS subscriptions as OPML from your feed reader (e.g., Feedly), or create one manually. Feeds are grouped by folder:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<opml version="1.0">
-  <head><title>My Feeds</title></head>
-  <body>
-    <outline text="Journals" title="Journals">
-      <outline type="rss" text="Nature" title="Nature"
-        xmlUrl="http://www.nature.com/nature/current_issue/rss" />
-    </outline>
-    <outline text="AI" title="AI">
-      <outline type="rss" text="OpenAI Blog" title="OpenAI Blog"
-        xmlUrl="https://openai.com/news/rss.xml" />
-    </outline>
-  </body>
-</opml>
+```bash
+cp feeds.example.opml feeds.opml
 ```
+
+Export your RSS subscriptions as OPML from your feed reader (e.g., Feedly), or edit manually. Feeds are grouped by folder.
 
 ### 3. Prepare `research_profile.yaml`
 
-Describes your research interests for LLM scoring. See `research_profile.yaml` in this repo for the full schema.
+```bash
+cp research_profile.example.yaml research_profile.yaml
+```
+
+Describes your research interests for LLM scoring. Customize the areas, keywords, and methods.
 
 ### 4. Set up `config.yaml`
 

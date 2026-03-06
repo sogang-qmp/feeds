@@ -1,4 +1,7 @@
 config.yaml
+research_profile.yaml
+feeds.opml
+*.local.*
 __pycache__/
 *.pyc
 .env
@@ -8,3 +11,4 @@ build/
 html/
 logs/
 *.db
+*.swp

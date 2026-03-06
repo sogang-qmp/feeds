@@ -1,19 +1,19 @@
 # Anthropic API
 anthropic:
   api_key: "YOUR_ANTHROPIC_API_KEY"
-  model: "claude-sonnet-4-6"
-  max_tokens: 8192
+  scoring_model: "claude-haiku-4-5-20251001"
 
 # Slack
 slack:
   bot_token: "xoxb-YOUR-SLACK-BOT-TOKEN"
   channel: "#journal-feed"
   log_channel: "#log"
-  max_message_length: 4000
 
 # Feed settings
 feeds:
   opml_file: "feeds.opml"
-  max_articles_per_feed: 20
-  max_summary_length: 500
-  days_lookback: 1
+  db: "feeds.db"
+
+# Deploy
+deploy:
+  base_url: "https://example.com/feeds"
