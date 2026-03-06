@@ -1,6 +1,17 @@
 # feeds
 
-LLM-based RSS feed recommender. Reads RSS feeds, uses Claude to filter articles relevant to your research profile, and posts recommendations to Slack.
+LLM-scored RSS feed reader. Fetches articles from RSS feeds into a local SQLite database, scores them by relevance to your research profile using Claude Haiku, and publishes a static HTML page with results.
+
+## Architecture
+
+```
+feeds.opml → [fetch] → SQLite DB → [curate] → HTML + Slack notification
+```
+
+- **`fetch`** — Parses OPML, fetches all RSS entries, stores in SQLite (deduped by link)
+- **`curate`** — Scores uncurated articles with Haiku (1-5), generates static HTML grouped by OPML folder/feed order, sends link to Slack
+
+HTML is served at `https://example.com/feeds/` via nginx.
 
 ## Setup
 
@@ -12,7 +23,7 @@ pip install -r requirements.txt
 
 ### 2. Prepare `feeds.opml`
 
-Export your RSS subscriptions as an OPML file from your feed reader (e.g., Feedly, Inoreader), or create one manually. Example structure:
+Export your RSS subscriptions as OPML from your feed reader (e.g., Feedly), or create one manually. Feeds are grouped by folder:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -22,8 +33,10 @@ Export your RSS subscriptions as an OPML file from your feed reader (e.g., Feedl
     <outline text="Journals" title="Journals">
       <outline type="rss" text="Nature" title="Nature"
         xmlUrl="http://www.nature.com/nature/current_issue/rss" />
-      <outline type="rss" text="PRL" title="PRL"
-        xmlUrl="http://feeds.aps.org/rss/recent/prl.xml" />
+    </outline>
+    <outline text="AI" title="AI">
+      <outline type="rss" text="OpenAI Blog" title="OpenAI Blog"
+        xmlUrl="https://openai.com/news/rss.xml" />
     </outline>
   </body>
 </opml>
@@ -31,13 +44,7 @@ Export your RSS subscriptions as an OPML file from your feed reader (e.g., Feedl
 
 ### 3. Prepare `research_profile.yaml`
 
-This file describes your research interests so the LLM can match relevant articles. See `research_profile.yaml` in this repo for the full schema.
-
-**Tip:** Use an AI assistant (e.g., Claude) with access to your publication history or memories to generate this file. For example, ask Claude:
-
-> "Based on what you know about my research, generate a `research_profile.yaml` with my research areas, keywords, and methods."
-
-This works especially well if you've been using Claude with project memory or have shared your CV/papers in a conversation.
+Describes your research interests for LLM scoring. See `research_profile.yaml` in this repo for the full schema.
 
 ### 4. Set up `config.yaml`
 
@@ -45,38 +52,53 @@ This works especially well if you've been using Claude with project memory or ha
 cp config.example.yaml config.yaml
 ```
 
-Edit `config.yaml` with your credentials:
+Edit with your credentials:
 
-- **`anthropic.api_key`** - Your Anthropic API key
-- **`slack.bot_token`** - Slack bot token (`xoxb-...`) or user token (`xoxp-...`)
-- **`slack.channel`** - Target Slack channel (e.g., `#journal-feed`)
-
-The bot/user must have `chat:write` permission and be a member of the target channel.
+- **`anthropic.api_key`** — Anthropic API key
+- **`slack.bot_token`** — Slack bot/user token with `chat:write` permission
+- **`slack.channel`** — Target Slack channel (e.g., `#journal-feed`)
 
 ## Usage
 
 ```bash
-# Dry run (prints to terminal, no Slack)
-python main.py --dry-run
+# Fetch RSS feeds into SQLite
+python main.py fetch
 
-# Send to Slack
-python main.py
+# Score new articles, generate HTML, send link to Slack
+python main.py curate
 
-# Override lookback window (default: 1 day)
-python main.py --days 3
+# Curate without sending to Slack
+python main.py --dry-run curate
 ```
+
+### Cron (daily at 9am)
+
+```
+0 9 * * * cd /path/to/feeds && python main.py fetch && python main.py curate
+```
+
+## Output
+
+- `html/{YYYY-MM-DD}.html` — Daily scored feed page
+- `html/latest.html` — Symlink to most recent curation
+- `html/index.html` — Listing of all curated pages
+- `logs/feeds.log` — Rotating log with 90-day retention, includes LLM API costs
 
 ## Config reference
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `anthropic.api_key` | (required) | Anthropic API key |
-| `anthropic.model` | `claude-sonnet-4-6` | Claude model to use |
-| `anthropic.max_tokens` | `8192` | Max response tokens |
+| `anthropic.scoring_model` | `claude-haiku-4-5-20251001` | Model for scoring |
 | `slack.bot_token` | (required) | Slack bot or user token |
 | `slack.channel` | `#journal-feed` | Target Slack channel |
-| `slack.max_message_length` | `4000` | Split messages at this length |
+| `slack.log_channel` | `#log` | Error notification channel |
 | `feeds.opml_file` | `feeds.opml` | Path to OPML file |
-| `feeds.max_articles_per_feed` | `20` | Max articles fetched per feed |
-| `feeds.max_summary_length` | `500` | Truncate article summaries |
-| `feeds.days_lookback` | `1` | Only include articles from last N days |
+| `feeds.db` | `feeds.db` | SQLite database path |
+| `deploy.base_url` | `https://example.com/feeds` | Public URL base for HTML |
+
+## Tests
+
+```bash
+python -m pytest test_main.py -v
+```
