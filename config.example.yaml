@@ -17,3 +17,7 @@ feeds:
 # Deploy
 deploy:
   base_url: "https://example.com/feeds"
+
+# Google Analytics (optional)
+# analytics:
+#   ga_id: "G-XXXXXXXXXX"

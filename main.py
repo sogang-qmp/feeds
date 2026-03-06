@@ -338,7 +338,19 @@ def sort_by_opml(scored, feeds):
     return scored
 
 
-def generate_html(scored_articles, today):
+def _ga_snippet(ga_id):
+    """Return Google Analytics snippet if GA ID is configured."""
+    if not ga_id:
+        return ""
+    return (
+        f'<script async src="https://www.googletagmanager.com/gtag/js?id={ga_id}"></script>'
+        f"<script>window.dataLayer=window.dataLayer||[];"
+        f"function gtag(){{dataLayer.push(arguments)}}"
+        f"gtag('js',new Date());gtag('config','{ga_id}');</script>"
+    )
+
+
+def generate_html(scored_articles, today, ga_id=""):
     """Generate static HTML page with articles grouped by folder/feed in OPML order."""
     from collections import OrderedDict
 
@@ -373,6 +385,7 @@ def generate_html(scored_articles, today):
 
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Feeds — {today}</title>
+{_ga_snippet(ga_id)}
 <style>
 body {{ font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; color: #222; }}
 h1 {{ font-size: 1.3em; }}
@@ -401,7 +414,7 @@ a:hover {{ text-decoration: underline; }}
     return html
 
 
-def deploy_html(html, today, base_dir):
+def deploy_html(html, today, base_dir, ga_id=""):
     """Write HTML to local html/ directory and update index."""
     out_dir = base_dir / "html"
     out_dir.mkdir(exist_ok=True)
@@ -412,11 +425,11 @@ def deploy_html(html, today, base_dir):
     latest = out_dir / "latest.html"
     latest.unlink(missing_ok=True)
     latest.symlink_to(path.name)
-    update_index(out_dir)
+    update_index(out_dir, ga_id)
     return path
 
 
-def update_index(out_dir):
+def update_index(out_dir, ga_id=""):
     """Regenerate index.html listing all date pages in reverse chronological order."""
     pages = sorted(out_dir.glob("2*.html"), reverse=True)
     items = ""
@@ -426,6 +439,7 @@ def update_index(out_dir):
 
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Feeds</title>
+{_ga_snippet(ga_id)}
 <style>
 body {{ font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; color: #222; }}
 h1 {{ font-size: 1.3em; }}
@@ -503,8 +517,9 @@ def cmd_curate(args, base_dir, config):
 
         # Generate HTML
         log.info("[curate] Generating HTML...")
-        html = generate_html(scored, today)
-        deploy_html(html, today, base_dir)
+        ga_id = config.get("analytics", {}).get("ga_id", "")
+        html = generate_html(scored, today, ga_id)
+        deploy_html(html, today, base_dir, ga_id)
 
         # Mark as curated
         ids = [a["id"] for a in articles]
