@@ -8,6 +8,7 @@ anthropic:
 slack:
   bot_token: "xoxb-YOUR-SLACK-BOT-TOKEN"
   channel: "#journal-feed"
+  log_channel: "#log"
   max_message_length: 4000
 
 # Feed settings

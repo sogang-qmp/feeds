@@ -9,6 +9,7 @@ from collections import OrderedDict
 import json
 import sys
 import time
+import traceback
 
 import anthropic
 import feedparser
@@ -222,6 +223,20 @@ def format_slack_message(recommendations):
     return "\n".join(lines)
 
 
+def send_error_to_slack(config, error_msg):
+    """Send error notification to Slack #log channel."""
+    try:
+        slack_cfg = config["slack"]
+        client = WebClient(token=slack_cfg["bot_token"])
+        log_channel = slack_cfg.get("log_channel", "#log")
+        client.chat_postMessage(
+            channel=log_channel,
+            text=f"*[feeds] Error*\n```{error_msg}```",
+        )
+    except Exception:
+        print(f"Failed to send error to Slack: {traceback.format_exc()}")
+
+
 def send_to_slack(config, recommendations):
     """Send recommendations to Slack channel."""
     slack_cfg = config["slack"]
@@ -298,4 +313,15 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        tb = traceback.format_exc()
+        print(tb)
+        try:
+            base_dir = Path(__file__).parent
+            config = load_config(base_dir / "config.yaml")
+            send_error_to_slack(config, tb[-3000:])
+        except Exception:
+            print(f"Failed to report error: {traceback.format_exc()}")
+        sys.exit(1)
