@@ -2,7 +2,7 @@
 
 LLM-scored RSS feed reader. Fetches articles from RSS feeds into a local SQLite database, scores them by relevance to your research profile using Claude Haiku, and publishes a static HTML page with results.
 
-**Demo:** https://vesper.sogang.ac.kr/feeds
+**Demo:** https://vesper.sogang.ac.kr/feeds/
 
 ## Architecture
 
