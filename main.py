@@ -247,11 +247,11 @@ def send_to_slack(config, recommendations):
 
     max_msg_len = slack_cfg.get("max_message_length", 4000)
     if len(text) <= max_msg_len:
-        client.chat_postMessage(channel=channel, text=text)
+        client.chat_postMessage(channel=channel, text=text, unfurl_links=False, unfurl_media=False)
     else:
         chunks = _split_message(text, max_msg_len)
         for chunk in chunks:
-            client.chat_postMessage(channel=channel, text=chunk)
+            client.chat_postMessage(channel=channel, text=chunk, unfurl_links=False, unfurl_media=False)
 
     print(f"  Sent {len(recommendations)} recommendations to {channel}")
 
