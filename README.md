@@ -35,7 +35,9 @@ Export your RSS subscriptions as OPML from your feed reader (e.g., Feedly), or e
 cp research_profile.example.yaml research_profile.yaml
 ```
 
-Describes your research interests for LLM scoring. Customize the areas, keywords, and methods.
+This file is passed directly as LLM context for scoring, so it's free-form — structure it however you like. A good approach is to ask an LLM that already knows your work (e.g., Claude with project memory) to generate it:
+
+> "Based on what you know about my research, generate a research_profile.yaml describing my areas, keywords, and methods."
 
 ### 4. Set up `config.yaml`
 
