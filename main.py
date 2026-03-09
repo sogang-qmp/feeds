@@ -384,7 +384,7 @@ def generate_html(scored_articles, today, ga_id=""):
                 )
 
     html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Feeds — {today}</title>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Feeds — {today}</title>
 {_ga_snippet(ga_id)}
 <style>
 body {{ font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; color: #222; }}
@@ -406,10 +406,20 @@ td {{ padding: 4px 8px; vertical-align: top; font-size: 0.9em; }}
 a {{ color: #1a0dab; text-decoration: none; }}
 a:visited {{ color: #681da8; }}
 a:hover {{ text-decoration: underline; }}
+@media (max-width: 600px) {{
+  body {{ margin: 1em auto; padding: 0 0.5em; }}
+  .score {{ width: 1.5em; font-size: 0.85em; }}
+  td {{ padding: 3px 4px; font-size: 0.85em; }}
+}}
 </style></head><body>
 <p><a href="index.html">&larr; All feeds</a></p>
 <h1>Feeds &mdash; {today}</h1>
 <table>{rows}</table>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{{delimiters:[{{left:'$$',right:'$$',display:true}},{{left:'$',right:'$',display:false}},{{left:'\\\\(',right:'\\\\)',display:false}},{{left:'\\\\[',right:'\\\\]',display:true}}]}});">
+</script>
 </body></html>"""
     return html
 
@@ -425,32 +435,52 @@ def deploy_html(html, today, base_dir, ga_id=""):
     latest = out_dir / "latest.html"
     latest.unlink(missing_ok=True)
     latest.symlink_to(path.name)
-    update_index(out_dir, ga_id)
+    opml_path = base_dir / "feeds.opml"
+    feeds = parse_opml(opml_path) if opml_path.exists() else []
+    update_index(out_dir, ga_id, feeds)
     return path
 
 
-def update_index(out_dir, ga_id=""):
-    """Regenerate index.html listing all date pages in reverse chronological order."""
+def update_index(out_dir, ga_id="", feeds=None):
+    """Regenerate index.html listing all date pages and subscribed feeds."""
     pages = sorted(out_dir.glob("2*.html"), reverse=True)
     items = ""
     for p in pages:
         name = p.stem
         items += f'<li><a href="{p.name}">{name}</a></li>\n'
 
+    feed_section = ""
+    if feeds:
+        from collections import OrderedDict
+        folders = OrderedDict()
+        for f in feeds:
+            folders.setdefault(f["folder"], []).append(f["title"])
+        feed_rows = ""
+        for folder, titles in folders.items():
+            if folder:
+                feed_rows += f'<li class="feed-folder">{folder}</li>\n'
+            for t in titles:
+                feed_rows += f"<li>{t}</li>\n"
+        feed_section = f'<h2>Subscribed Feeds ({len(feeds)})</h2>\n<ul class="feed-list">{feed_rows}</ul>'
+
     html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Feeds</title>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Feeds</title>
 {_ga_snippet(ga_id)}
 <style>
 body {{ font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; color: #222; }}
 h1 {{ font-size: 1.3em; }}
+h2 {{ font-size: 1.1em; margin-top: 2em; color: #555; }}
 ul {{ list-style: none; padding: 0; }}
-li {{ padding: 4px 0; }}
-a {{ color: #1a0dab; text-decoration: none; font-size: 1.1em; }}
+li {{ padding: 4px 0; font-size: 0.9em; }}
+a {{ color: #1a0dab; text-decoration: none; }}
 a:visited {{ color: #681da8; }}
 a:hover {{ text-decoration: underline; }}
+.feed-folder {{ font-weight: bold; font-size: 1.1em; color: #007bff; padding: 8px 0 2px 0; }}
+.feed-list li {{ padding: 2px 0 2px 1em; color: #444; }}
 </style></head><body>
 <h1>Feeds</h1>
 <ul>{items}</ul>
+{feed_section}
 </body></html>"""
     (out_dir / "index.html").write_text(html)
 
