@@ -1,0 +1,29 @@
+topics:
+  # 핵심 방법론
+  - "GW approximation and quasiparticle self-energy calculations"
+  - "Bethe-Salpeter equation (BSE) for excitons and optical spectra"
+  - "Electron-phonon coupling from first principles (superconductivity, polarons, carrier dynamics)"
+  - "Ab initio electronic structure calculations (DFT, DFPT, many-body perturbation theory)"
+
+  # 물질 시스템
+  - "2D materials: TMDs, graphene, hBN, van der Waals heterostructures"
+  - "1D materials: nanowires, nanotubes, atomic chains"
+  - "Excitonic properties in low-dimensional materials"
+  - "Semiconductors: band gaps, carrier transport, phonon-limited mobility"
+
+  # AI/ML
+  - "Machine learning for accelerating ab initio calculations (ML potentials, surrogate models)"
+  - "AI agents for computational research and workflow automation"
+
+  # 계산 코드
+  - "BerkeleyGW, Quantum ESPRESSO, VASP developments and benchmarks"
+
+  # 실험 (이론 비교 대상)
+  - "Photoluminescence, optical spectroscopy, ARPES, TEM/STEM on novel materials"
+
+summary_threshold: 4
+
+scoring_prompt: |
+  Score 5 for papers that directly involve ab initio many-body calculations (GW, BSE, electron-phonon).
+  Score 4-5 for experimental papers on novel low-dimensional materials or semiconductors that lack theoretical/computational analysis — these represent collaboration opportunities.
+  Score lower for purely experimental papers that already include sufficient theoretical explanation.
