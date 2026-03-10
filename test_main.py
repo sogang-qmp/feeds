@@ -79,7 +79,7 @@ def sample_config():
         },
         "slack": {
             "bot_token": "xoxb-test",
-            "user_id": "U0TEST",
+            "channel": "#test",
             "log_channel": "#log",
         },
         "feeds": {
@@ -93,20 +93,25 @@ def sample_config():
 
 
 @pytest.fixture
-def sample_topics():
+def sample_profile():
     return {
-        "topics": [
-            "DFT and electronic structure",
-            "Phonon calculations",
-        ],
-        "summary_threshold": 4,
+        "researcher": {
+            "name": "Test User",
+            "position": "Professor",
+            "affiliation": "Test University",
+        },
+        "research_areas": {
+            "primary": ["condensed matter", "DFT"],
+        },
+        "keywords": {
+            "strong": ["phonon", "graphene"],
+            "weak": ["physics"],
+        },
     }
 
 
-def _make_articles(n=3, feed="Feed A", folder="Science", published=None):
+def _make_articles(n=3, feed="Feed A", folder="Science"):
     """Helper to create article dicts."""
-    if published is None:
-        published = datetime.now(timezone.utc).isoformat()
     return [
         {
             "id": i + 1,
@@ -116,7 +121,7 @@ def _make_articles(n=3, feed="Feed A", folder="Science", published=None):
             "link": f"http://example.com/{i}",
             "authors": f"Author {i}",
             "summary": f"Summary {i}",
-            "published": published,
+            "published": f"2026-03-07T00:00:00+00:00",
         }
         for i in range(n)
     ]
@@ -265,7 +270,7 @@ class TestFetchArticles:
 
     def test_truncates_long_summary(self, db):
         feed = {"title": "Test Feed", "url": "http://test.com/rss", "folder": ""}
-        long_summary = "x" * 2500
+        long_summary = "x" * 600
         entry = _make_feed_entry("Long", "http://test.com/long", (2026, 3, 7, 0, 0, 0, 0, 0, 0))
         entry.summary = long_summary
         mock_parsed = SimpleNamespace(entries=[entry])
@@ -274,7 +279,7 @@ class TestFetchArticles:
             main.fetch_articles([feed], db)
 
         row = db.execute("SELECT summary FROM articles").fetchone()
-        assert len(row["summary"]) == 2003  # 2000 + "..."
+        assert len(row["summary"]) == 503  # 500 + "..."
 
     def test_extracts_authors(self, db):
         feed = {"title": "Test Feed", "url": "http://test.com/rss", "folder": ""}
@@ -308,27 +313,24 @@ class TestFetchArticles:
         assert row["curated"] == 0
 
 
-# --- _build_topics_text ---
+# --- _build_profile_text ---
 
-class TestBuildTopicsText:
-    def test_includes_topics(self, sample_topics):
-        text = main._build_topics_text(sample_topics)
-        assert "DFT and electronic structure" in text
-        assert "Phonon calculations" in text
+class TestBuildProfileText:
+    def test_includes_fields(self, sample_profile):
+        text = main._build_profile_text(sample_profile)
+        assert "Test User" in text
+        assert "Professor" in text
+        assert "condensed matter" in text
+        assert "phonon" in text
 
-    def test_numbered_list(self, sample_topics):
-        text = main._build_topics_text(sample_topics)
-        assert "1." in text
-        assert "2." in text
+    def test_with_scoring_prompt(self, sample_profile):
+        sample_profile["scoring_prompt"] = "Focus on materials"
+        text = main._build_profile_text(sample_profile)
+        assert "Focus on materials" in text
 
-    def test_with_scoring_prompt(self, sample_topics):
-        sample_topics["scoring_prompt"] = "Focus on methods"
-        text = main._build_topics_text(sample_topics)
-        assert "Focus on methods" in text
-
-    def test_empty_topics(self):
-        text = main._build_topics_text({})
-        assert "Topics of interest" in text
+    def test_empty_profile(self):
+        text = main._build_profile_text({})
+        assert "N/A" in text
 
 
 # --- _score_batch ---
@@ -342,41 +344,41 @@ def _mock_llm_message(text, input_tokens=100, output_tokens=50):
 
 
 class TestScoreBatch:
-    def test_parses_response(self, sample_topics):
+    def test_parses_response(self, sample_profile):
         batch = _make_articles(2)
-        topics_text = main._build_topics_text(sample_topics)
+        profile_text = main._build_profile_text(sample_profile)
         scores_json = json.dumps([{"index": 0, "score": 4}, {"index": 1, "score": 2}])
 
         mock_msg = _mock_llm_message(scores_json)
         mock_client = MagicMock()
         mock_client.messages.create.return_value = mock_msg
 
-        score_map, inp, out = main._score_batch(batch, topics_text, mock_client, "test-model", 4096)
+        score_map, inp, out = main._score_batch(batch, profile_text, mock_client, "test-model", 4096)
         assert score_map == {0: 4, 1: 2}
         assert inp == 100
         assert out == 50
 
-    def test_strips_markdown_fences(self, sample_topics):
+    def test_strips_markdown_fences(self, sample_profile):
         batch = _make_articles(1)
-        topics_text = main._build_topics_text(sample_topics)
+        profile_text = main._build_profile_text(sample_profile)
         response = '```json\n[{"index": 0, "score": 5}]\n```'
 
         mock_msg = _mock_llm_message(response)
         mock_client = MagicMock()
         mock_client.messages.create.return_value = mock_msg
 
-        score_map, _, _ = main._score_batch(batch, topics_text, mock_client, "test-model", 4096)
+        score_map, _, _ = main._score_batch(batch, profile_text, mock_client, "test-model", 4096)
         assert score_map == {0: 5}
 
 
 # --- score_articles ---
 
 class TestScoreArticles:
-    def test_empty_articles(self, sample_topics, sample_config):
-        result = main.score_articles([], sample_topics, sample_config)
+    def test_empty_articles(self, sample_profile, sample_config):
+        result = main.score_articles([], sample_profile, sample_config)
         assert result == []
 
-    def test_batching(self, sample_topics, sample_config):
+    def test_batching(self, sample_profile, sample_config):
         articles = _make_articles(5)
         scores_json = lambda n: json.dumps([{"index": i, "score": 3} for i in range(n)])
 
@@ -393,13 +395,13 @@ class TestScoreArticles:
         with patch("main.BATCH_SIZE", 3):
             with patch("anthropic.Anthropic") as MockClient:
                 MockClient.return_value.messages.create = mock_create
-                result = main.score_articles(articles, sample_topics, sample_config)
+                result = main.score_articles(articles, sample_profile, sample_config)
 
         assert len(result) == 5
         assert call_count == 2  # 3 + 2
         assert all(a["score"] == 3 for a in result)
 
-    def test_missing_score_defaults_to_1(self, sample_topics, sample_config):
+    def test_missing_score_defaults_to_1(self, sample_profile, sample_config):
         articles = _make_articles(2)
         scores_json = json.dumps([{"index": 0, "score": 5}])
 
@@ -407,173 +409,10 @@ class TestScoreArticles:
 
         with patch("anthropic.Anthropic") as MockClient:
             MockClient.return_value.messages.create.return_value = mock_msg
-            result = main.score_articles(articles, sample_topics, sample_config)
+            result = main.score_articles(articles, sample_profile, sample_config)
 
         assert result[0]["score"] == 5
         assert result[1]["score"] == 1  # default
-
-
-# --- _summarize_batch ---
-
-class TestSummarizeBatch:
-    def test_parses_response(self):
-        batch = _make_articles(2)
-        summaries_json = json.dumps([
-            {"index": 0, "summary": "Summary of article 0", "key_points": ["Point A"]},
-            {"index": 1, "summary": "Summary of article 1", "key_points": ["Point B", "Point C"]},
-        ])
-
-        mock_msg = _mock_llm_message(summaries_json)
-        mock_client = MagicMock()
-        mock_client.messages.create.return_value = mock_msg
-
-        smap, inp, out = main._summarize_batch(batch, mock_client, "test-model", 4096)
-        assert 0 in smap
-        assert smap[0]["summary"] == "Summary of article 0"
-        assert smap[1]["key_points"] == ["Point B", "Point C"]
-
-    def test_strips_markdown_fences(self):
-        batch = _make_articles(1)
-        response = '```json\n[{"index": 0, "summary": "Test", "key_points": []}]\n```'
-
-        mock_msg = _mock_llm_message(response)
-        mock_client = MagicMock()
-        mock_client.messages.create.return_value = mock_msg
-
-        smap, _, _ = main._summarize_batch(batch, mock_client, "test-model", 4096)
-        assert smap[0]["summary"] == "Test"
-
-
-# --- summarize_articles ---
-
-class TestSummarizeArticles:
-    def test_no_high_score_articles(self, sample_config):
-        scored = [
-            {**a, "score": 2}
-            for a in _make_articles(3)
-        ]
-        result = main.summarize_articles(scored, sample_config, threshold=4)
-        assert len(result) == 3
-        assert all(a["summary_info"] == {} for a in result)
-
-    def test_attaches_summary_info(self, sample_config):
-        articles = _make_articles(3)
-        scored = [
-            {**articles[0], "score": 5},
-            {**articles[1], "score": 4},
-            {**articles[2], "score": 2},
-        ]
-
-        summaries_json = json.dumps([
-            {"index": 0, "summary": "High relevance", "key_points": ["A"]},
-            {"index": 1, "summary": "Also relevant", "key_points": ["B"]},
-        ])
-        mock_msg = _mock_llm_message(summaries_json)
-
-        with patch("anthropic.Anthropic") as MockClient:
-            MockClient.return_value.messages.create.return_value = mock_msg
-            result = main.summarize_articles(scored, sample_config, threshold=4)
-
-        assert result[0]["summary_info"]["summary"] == "High relevance"
-        assert result[1]["summary_info"]["summary"] == "Also relevant"
-        assert result[2]["summary_info"] == {}
-
-    def test_batching(self, sample_config):
-        articles = _make_articles(5)
-        scored = [{**a, "score": 5} for a in articles]
-
-        summaries_json = lambda n: json.dumps([
-            {"index": i, "summary": f"S{i}", "key_points": []}
-            for i in range(n)
-        ])
-
-        call_count = 0
-        def mock_create(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            prompt = kwargs["messages"][0]["content"]
-            import re
-            indices = re.findall(r'\[(\d+)\]', prompt)
-            return _mock_llm_message(summaries_json(len(indices)))
-
-        with patch("main.SUMMARY_BATCH_SIZE", 3):
-            with patch("anthropic.Anthropic") as MockClient:
-                MockClient.return_value.messages.create = mock_create
-                result = main.summarize_articles(scored, sample_config, threshold=4)
-
-        assert call_count == 2  # 3 + 2
-        assert all(a.get("summary_info") for a in result)
-
-
-# --- generate_summary_md ---
-
-class TestGenerateSummaryMd:
-    def test_empty_when_no_high_scores(self):
-        scored = [{**a, "score": 2, "summary_info": {}} for a in _make_articles(3)]
-        md = main.generate_summary_md(scored, "2026-03-07", threshold=4)
-        assert md == ""
-
-    def test_contains_article_info(self):
-        articles = _make_articles(1)
-        scored = [{
-            **articles[0],
-            "score": 5,
-            "summary_info": {
-                "summary": "Important finding about DFT.",
-                "key_points": ["Point 1", "Point 2"],
-            },
-        }]
-        md = main.generate_summary_md(scored, "2026-03-07", threshold=4)
-        assert "Article 0" in md
-        assert "Important finding about DFT." in md
-        assert "Point 1" in md
-        assert "Score:** 5" in md
-
-    def test_includes_header(self):
-        scored = [{
-            **_make_articles(1)[0],
-            "score": 4,
-            "summary_info": {"summary": "Test", "key_points": []},
-        }]
-        md = main.generate_summary_md(scored, "2026-03-07", threshold=4)
-        assert "# Feeds Summary" in md
-        assert "2026-03-07" in md
-        assert "1 articles with score >= 4" in md
-
-
-# --- deploy_summary ---
-
-class TestRenderSummaryHtml:
-    def test_contains_title(self):
-        html = main.render_summary_html("# Test", "2026-03-07")
-        assert "Summary — 2026-03-07" in html
-
-    def test_renders_markdown(self):
-        html = main.render_summary_html("**bold text**", "2026-03-07")
-        assert "<strong>bold text</strong>" in html
-
-    def test_includes_nav_link(self):
-        html = main.render_summary_html("# Test", "2026-03-07")
-        assert "All feeds" in html
-
-    def test_includes_katex(self):
-        html = main.render_summary_html("# Test", "2026-03-07")
-        assert "katex" in html
-
-
-class TestDeploySummary:
-    def test_writes_md_and_html(self, tmp_dir):
-        path = main.deploy_summary("# Test", "2026-03-07", tmp_dir)
-        assert path.exists()
-        assert path.read_text() == "# Test"
-        html_path = tmp_dir / "summaries" / "2026-03-07.html"
-        assert html_path.exists()
-        assert "<strong>" not in path.read_text()  # md is raw
-        assert "<!DOCTYPE html>" in html_path.read_text()
-
-    def test_creates_summaries_dir(self, tmp_dir):
-        main.deploy_summary("# Test", "2026-03-07", tmp_dir)
-        assert (tmp_dir / "summaries").is_dir()
 
 
 # --- sort_by_opml ---
@@ -681,15 +520,6 @@ class TestGenerateHtml:
         html = main.generate_html(articles, "2026-03-07")
         assert 'class="authors"' not in html
 
-    def test_summary_link_shown(self):
-        html = main.generate_html([], "2026-03-07", summary_count=5)
-        assert "Summary (5 articles)" in html
-        assert "summaries/2026-03-07.html" in html
-
-    def test_no_summary_link_when_zero(self):
-        html = main.generate_html([], "2026-03-07", summary_count=0)
-        assert "Summary (" not in html
-
 
 # --- deploy_html / update_index ---
 
@@ -746,33 +576,16 @@ class TestUpdateIndex:
 # --- send_link_to_slack ---
 
 class TestSendLinkToSlack:
-    def test_sends_dm(self, sample_config):
+    def test_posts_message(self, sample_config):
         with patch("main.WebClient") as MockWC:
             mock_client = MockWC.return_value
             main.send_link_to_slack(sample_config, "2026-03-07")
 
             mock_client.chat_postMessage.assert_called_once()
             call_kwargs = mock_client.chat_postMessage.call_args[1]
-            assert call_kwargs["channel"] == "U0TEST"
             assert "2026-03-07" in call_kwargs["text"]
             assert "example.com/feeds/2026-03-07.html" in call_kwargs["text"]
             assert call_kwargs["unfurl_links"] is False
-
-    def test_includes_summary_link(self, sample_config):
-        with patch("main.WebClient") as MockWC:
-            mock_client = MockWC.return_value
-            main.send_link_to_slack(sample_config, "2026-03-07", has_summary=True)
-
-            call_kwargs = mock_client.chat_postMessage.call_args[1]
-            assert "summaries/2026-03-07.html" in call_kwargs["text"]
-
-    def test_no_summary_link_by_default(self, sample_config):
-        with patch("main.WebClient") as MockWC:
-            mock_client = MockWC.return_value
-            main.send_link_to_slack(sample_config, "2026-03-07")
-
-            call_kwargs = mock_client.chat_postMessage.call_args[1]
-            assert "Summary" not in call_kwargs["text"]
 
 
 # --- send_error_to_slack ---
@@ -795,162 +608,51 @@ class TestSendErrorToSlack:
 
 # --- cmd_curate (integration-ish) ---
 
-def _curate_opml(tmp_dir):
-    """Helper: write a minimal OPML file for curate tests."""
-    opml = textwrap.dedent("""\
-    <?xml version="1.0" encoding="UTF-8"?>
-    <opml version="1.0"><head/><body>
-    <outline text="Science" title="Science">
-        <outline type="rss" text="Feed A" title="Feed A" xmlUrl="http://a.com/rss"/>
-    </outline>
-    </body></opml>
-    """)
-    (tmp_dir / "feeds.opml").write_text(opml)
-
-
-def _curate_topics(tmp_dir, sample_topics):
-    """Helper: write topics.yaml for curate tests."""
-    import yaml
-    (tmp_dir / "topics.yaml").write_text(yaml.dump(sample_topics))
-
-
 class TestCmdCurate:
-    def test_scores_and_generates_html(self, tmp_dir, sample_config, sample_topics):
-        db_path = tmp_dir / "test.db"
-        sample_config["feeds"]["db"] = "test.db"
-        sample_config["feeds"]["opml_file"] = "feeds.opml"
-        conn = main.init_db(db_path)
-        _insert_articles(conn, _make_articles(3), curated=0)
-        conn.close()
-
-        _curate_opml(tmp_dir)
-        _curate_topics(tmp_dir, sample_topics)
-
-        scores_json = json.dumps([{"index": i, "score": 3} for i in range(3)])
-        mock_msg = _mock_llm_message(scores_json)
-        args = SimpleNamespace(dry_run=True, topics="topics.yaml")
-
-        with patch("anthropic.Anthropic") as MockClient:
-            MockClient.return_value.messages.create.return_value = mock_msg
-            main.cmd_curate(args, tmp_dir, sample_config)
-
-        # Scores saved to DB
-        conn = main.init_db(db_path)
-        scored = conn.execute("SELECT COUNT(*) FROM articles WHERE score IS NOT NULL").fetchone()[0]
-        assert scored == 3
-        conn.close()
-
-        # HTML generated
-        html_files = list((tmp_dir / "html").glob("2*.html"))
-        assert len(html_files) == 1
-
-    def test_reuses_cached_scores(self, tmp_dir, sample_config, sample_topics):
+    def test_marks_articles_as_curated(self, tmp_dir, sample_config, sample_profile):
+        # Setup DB with uncurated articles
         db_path = tmp_dir / "test.db"
         sample_config["feeds"]["db"] = "test.db"
         sample_config["feeds"]["opml_file"] = "feeds.opml"
         conn = main.init_db(db_path)
         articles = _make_articles(3)
         _insert_articles(conn, articles, curated=0)
-        # Pre-set scores for 2 articles
-        conn.execute("UPDATE articles SET score=4 WHERE id=1")
-        conn.execute("UPDATE articles SET score=2 WHERE id=2")
-        conn.commit()
         conn.close()
 
-        _curate_opml(tmp_dir)
-        _curate_topics(tmp_dir, sample_topics)
+        # Write OPML
+        opml = textwrap.dedent("""\
+        <?xml version="1.0" encoding="UTF-8"?>
+        <opml version="1.0"><head/><body>
+        <outline text="Science" title="Science">
+            <outline type="rss" text="Feed A" title="Feed A" xmlUrl="http://a.com/rss"/>
+        </outline>
+        </body></opml>
+        """)
+        (tmp_dir / "feeds.opml").write_text(opml)
 
-        # Only 1 article needs scoring (id=3)
-        scores_json = json.dumps([{"index": 0, "score": 5}])
+        # Write profile
+        import yaml
+        (tmp_dir / "research_profile.yaml").write_text(yaml.dump(sample_profile))
+
+        # Mock scoring
+        scores_json = json.dumps([{"index": i, "score": 3} for i in range(3)])
         mock_msg = _mock_llm_message(scores_json)
-        args = SimpleNamespace(dry_run=True, topics="topics.yaml")
+
+        args = SimpleNamespace(dry_run=True, profile="research_profile.yaml")
 
         with patch("anthropic.Anthropic") as MockClient:
             MockClient.return_value.messages.create.return_value = mock_msg
             main.cmd_curate(args, tmp_dir, sample_config)
 
-            # Scoring API should be called only once (for 1 unscored article)
-            score_calls = [
-                c for c in MockClient.return_value.messages.create.call_args_list
-                if "Score each article" in str(c)
-            ]
-            assert len(score_calls) == 1
-
-    def test_generates_summary_for_high_scores(self, tmp_dir, sample_config, sample_topics):
-        db_path = tmp_dir / "test.db"
-        sample_config["feeds"]["db"] = "test.db"
-        sample_config["feeds"]["opml_file"] = "feeds.opml"
+        # Check all marked as curated
         conn = main.init_db(db_path)
-        _insert_articles(conn, _make_articles(3), curated=0)
+        pending = conn.execute("SELECT COUNT(*) FROM articles WHERE curated=0").fetchone()[0]
+        assert pending == 0
         conn.close()
 
-        _curate_opml(tmp_dir)
-        _curate_topics(tmp_dir, sample_topics)
-
-        def mock_create(**kwargs):
-            prompt = kwargs["messages"][0]["content"]
-            import re
-            indices = re.findall(r'\[(\d+)\]', prompt)
-            n = len(indices)
-            if "Score each article" in prompt:
-                return _mock_llm_message(
-                    json.dumps([{"index": i, "score": 5} for i in range(n)])
-                )
-            else:
-                return _mock_llm_message(
-                    json.dumps([{"index": i, "summary": f"S{i}", "key_points": ["P"]} for i in range(n)])
-                )
-
-        args = SimpleNamespace(dry_run=True, topics="topics.yaml")
-
-        with patch("anthropic.Anthropic") as MockClient:
-            MockClient.return_value.messages.create = mock_create
-            main.cmd_curate(args, tmp_dir, sample_config)
-
-        summary_files = list((tmp_dir / "summaries").glob("*.md"))
-        assert len(summary_files) == 1
-
-    def test_only_includes_recent_articles(self, tmp_dir, sample_config, sample_topics):
-        db_path = tmp_dir / "test.db"
-        sample_config["feeds"]["db"] = "test.db"
-        sample_config["feeds"]["opml_file"] = "feeds.opml"
-        conn = main.init_db(db_path)
-
-        old_date = (datetime.now(timezone.utc) - main.timedelta(days=5)).isoformat()
-        old_articles = _make_articles(3, published=old_date)
-        fresh_articles = [
-            {**a, "id": a["id"] + 10, "link": f"http://example.com/fresh/{a['id']}"}
-            for a in _make_articles(2)
-        ]
-        _insert_articles(conn, old_articles, curated=0)
-        _insert_articles(conn, fresh_articles, curated=0)
-        conn.close()
-
-        _curate_opml(tmp_dir)
-        _curate_topics(tmp_dir, sample_topics)
-
-        # Only 2 fresh articles should be scored
-        scores_json = json.dumps([{"index": i, "score": 3} for i in range(2)])
-        mock_msg = _mock_llm_message(scores_json)
-        args = SimpleNamespace(dry_run=True, topics="topics.yaml")
-
-        with patch("anthropic.Anthropic") as MockClient:
-            MockClient.return_value.messages.create.return_value = mock_msg
-            main.cmd_curate(args, tmp_dir, sample_config)
-
-        # Old articles should NOT have scores (not processed)
-        conn = main.init_db(db_path)
-        old_scored = conn.execute(
-            "SELECT COUNT(*) FROM articles WHERE published < ? AND score IS NOT NULL",
-            (old_date,),
-        ).fetchone()[0]
-        assert old_scored == 0
-        # Fresh articles should have scores
-        fresh_scored = conn.execute(
-            "SELECT COUNT(*) FROM articles WHERE score IS NOT NULL"
-        ).fetchone()[0]
-        assert fresh_scored == 2
-        conn.close()
+        # Check HTML was generated
+        html_files = list((tmp_dir / "html").glob("2*.html"))
+        assert len(html_files) == 1
 
     def test_nothing_to_curate(self, tmp_dir, sample_config):
         db_path = tmp_dir / "test.db"
@@ -958,6 +660,8 @@ class TestCmdCurate:
         conn = main.init_db(db_path)
         conn.close()
 
-        args = SimpleNamespace(dry_run=True, topics="topics.yaml")
+        args = SimpleNamespace(dry_run=True, profile="research_profile.yaml")
+        # Should not raise
         main.cmd_curate(args, tmp_dir, sample_config)
+        # No HTML generated
         assert not (tmp_dir / "html").exists()

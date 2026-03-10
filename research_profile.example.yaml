@@ -1,0 +1,29 @@
+# Research Profile for Article Scoring
+# Copy to research_profile.yaml and customize for your research interests.
+
+researcher:
+  name: Your Name
+  position: Assistant Professor
+  affiliation: University, Department
+
+research_areas:
+  primary:
+    - your primary research area
+    - another primary area
+  secondary:
+    - secondary area
+  methods:
+    - computational methods you use
+  materials_systems:
+    - materials you study
+
+keywords:
+  strong:
+    - high relevance keyword
+  moderate:
+    - moderate relevance keyword
+  weak:
+    - broad keyword
+
+# Optional: additional guidance for the scoring LLM
+# scoring_prompt: "Focus on computational methods papers"

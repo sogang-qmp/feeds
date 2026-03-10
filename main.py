@@ -3,23 +3,19 @@
 
 Usage:
     python main.py fetch     # RSS → SQLite
-    python main.py curate    # SQLite (new articles) → score → summarize → HTML + MD → Slack DM
+    python main.py curate    # SQLite (new articles) → score → HTML → Slack
 """
 
 import xml.etree.ElementTree as ET
 import sqlite3
 import logging
 import logging.handlers
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 import argparse
 import json
 import sys
 import traceback
-
-import shutil
-import subprocess
-import tempfile
 
 import anthropic
 import feedparser
@@ -61,7 +57,7 @@ def load_config(path="config.yaml"):
         return yaml.safe_load(f)
 
 
-def load_topics(path="topics.yaml"):
+def load_research_profile(path="research_profile.yaml"):
     with open(path) as f:
         return yaml.safe_load(f)
 
@@ -81,14 +77,9 @@ def init_db(db_path):
             summary TEXT,
             published TEXT,
             fetched_at TEXT,
-            curated INTEGER DEFAULT 0,
-            score INTEGER
+            curated INTEGER DEFAULT 0
         )
     """)
-    # Migrate: add score column if missing (existing DBs)
-    cols = [r[1] for r in conn.execute("PRAGMA table_info(articles)").fetchall()]
-    if "score" not in cols:
-        conn.execute("ALTER TABLE articles ADD COLUMN score INTEGER")
     conn.commit()
     return conn
 
@@ -149,8 +140,8 @@ def fetch_articles(feeds, conn):
                 continue
 
             summary = getattr(entry, "summary", "") or ""
-            if len(summary) > 2000:
-                summary = summary[:2000] + "..."
+            if len(summary) > 500:
+                summary = summary[:500] + "..."
 
             authors = ""
             if hasattr(entry, "authors") and entry.authors:
@@ -191,28 +182,45 @@ def cmd_fetch(args, base_dir, config):
         fetch_articles(feeds, conn)
         after = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
         new = after - before
+        pending = conn.execute("SELECT COUNT(*) FROM articles WHERE curated=0").fetchone()[0]
 
-        log.info(f"[fetch] Done. {new} new articles stored.")
+        log.info(f"[fetch] Done. {new} new articles stored. {pending} pending curation.")
     finally:
         conn.close()
 
 
 # --- curate command ---
 
-def _build_topics_text(topics_config):
-    """Build topics text for scoring prompt."""
-    topics = topics_config.get("topics", [])
-    lines = ["Topics of interest:"]
-    for i, t in enumerate(topics, 1):
-        lines.append(f"  {i}. {t}")
+def _build_profile_text(profile):
+    """Build profile text for scoring prompt."""
+    researcher = profile.get("researcher", {})
+    areas = profile.get("research_areas", {})
+    keywords = profile.get("keywords", {})
 
-    scoring_prompt = topics_config.get("scoring_prompt", "")
+    def flatten(obj):
+        if isinstance(obj, list):
+            return obj
+        if isinstance(obj, dict):
+            items = []
+            for v in obj.values():
+                items.extend(flatten(v))
+            return items
+        return [str(obj)]
+
+    text = (
+        f"Name: {researcher.get('name', 'N/A')}\n"
+        f"Position: {researcher.get('position', 'N/A')}\n"
+        f"Affiliation: {researcher.get('affiliation', 'N/A')}\n"
+        f"Research areas: {', '.join(flatten(areas))}\n"
+        f"Keywords: {', '.join(flatten(keywords))}\n"
+    )
+    scoring_prompt = profile.get("scoring_prompt", "")
     if scoring_prompt:
-        lines.append(f"\nScoring guidance:\n{scoring_prompt}")
-    return "\n".join(lines)
+        text += f"\nScoring guidance:\n{scoring_prompt}"
+    return text
 
 
-def _score_batch(batch, topics_text, client, model, max_tokens):
+def _score_batch(batch, profile_text, client, model, max_tokens):
     """Score a single batch of articles."""
     articles_text = ""
     for i, a in enumerate(batch):
@@ -223,17 +231,17 @@ def _score_batch(batch, topics_text, client, model, max_tokens):
             f"    Summary: {a['summary']}\n"
         )
 
-    prompt = f"""You are a research assistant. Score EVERY article by relevance to the following topics.
+    prompt = f"""You are a research assistant. Score EVERY article by relevance to this researcher's interests.
 
-## Topics
-{topics_text}
+## Researcher Profile
+{profile_text}
 
 ## Articles
 {articles_text}
 
 ## Instructions
 Score each article from 1 to 5:
-  5 = directly about one of the topics
+  5 = directly related to researcher's core topics
   4 = closely related
   3 = somewhat related
   2 = tangentially related
@@ -268,20 +276,21 @@ You MUST include every article. Return ONLY the JSON array."""
             score_map[s["index"]] = s["score"]
 
     usage = message.usage
-    return score_map, usage.input_tokens, usage.output_tokens
+    input_tokens = usage.input_tokens
+    output_tokens = usage.output_tokens
+    return score_map, input_tokens, output_tokens
 
 
 BATCH_SIZE = 200
-SUMMARY_BATCH_SIZE = 10
 
 
-def score_articles(articles, topics_config, config):
-    """Use Haiku to score every article on a 1-5 scale."""
+def score_articles(articles, profile, config):
+    """Use Haiku to score every article on a 1-5 scale, batching if needed."""
     if not articles:
         return []
 
     api_cfg = config["anthropic"]
-    topics_text = _build_topics_text(topics_config)
+    profile_text = _build_profile_text(profile)
     client = anthropic.Anthropic(api_key=api_cfg["api_key"])
     model = api_cfg.get("scoring_model", "claude-haiku-4-5-20251001")
     max_tokens = api_cfg.get("max_tokens", 16384)
@@ -290,14 +299,14 @@ def score_articles(articles, topics_config, config):
     total_input = 0
     total_output = 0
     failed_batches = 0
-    total_batches = (len(articles) + BATCH_SIZE - 1) // BATCH_SIZE
     for start in range(0, len(articles), BATCH_SIZE):
         batch = articles[start:start + BATCH_SIZE]
         batch_num = start // BATCH_SIZE + 1
+        total_batches = (len(articles) + BATCH_SIZE - 1) // BATCH_SIZE
         log.info(f"  Scoring batch {batch_num}/{total_batches} ({len(batch)} articles)...")
 
         try:
-            score_map, inp_tok, out_tok = _score_batch(batch, topics_text, client, model, max_tokens)
+            score_map, inp_tok, out_tok = _score_batch(batch, profile_text, client, model, max_tokens)
             total_input += inp_tok
             total_output += out_tok
         except (anthropic.APIError, json.JSONDecodeError, ValueError, KeyError) as e:
@@ -308,195 +317,13 @@ def score_articles(articles, topics_config, config):
             scored.append({**a, "score": score_map.get(i, 1)})
 
     cost = (total_input * HAIKU_INPUT_COST + total_output * HAIKU_OUTPUT_COST) / 1_000_000
-    log.info(f"  Scoring: {total_input} input + {total_output} output tokens = ${cost:.4f}")
+    log.info(f"  LLM usage: {total_input} input + {total_output} output tokens = ${cost:.4f}")
     if failed_batches:
         msg = f"{failed_batches}/{total_batches} batch(es) failed — affected articles scored as 1"
         log.warning(f"  {msg}")
         send_error_to_slack(config, f"Scoring partial failure: {msg}")
 
     return scored
-
-
-def _summarize_batch(batch, client, model, max_tokens):
-    """Summarize a batch of high-scoring articles using LLM."""
-    articles_text = ""
-    for i, a in enumerate(batch):
-        articles_text += (
-            f"\n[{i}] Title: {a['title']}\n"
-            f"    Authors: {a['authors'] or 'N/A'}\n"
-            f"    Abstract: {a['summary']}\n"
-        )
-
-    prompt = f"""Summarize each article based on its title and abstract.
-{articles_text}
-
-For each article, provide:
-- "summary": 2-3 sentence summary of the key contribution
-- "key_points": list of 2-4 main findings or contributions
-
-Return a JSON array:
-[{{"index": 0, "summary": "...", "key_points": ["...", "..."]}}, ...]
-
-Write in the same language as each article's title/abstract. Return ONLY the JSON array."""
-
-    message = client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    if not message.content:
-        raise ValueError("LLM returned empty content")
-
-    response_text = message.content[0].text.strip()
-    if response_text.startswith("```"):
-        response_text = response_text.split("\n", 1)[1]
-        response_text = response_text.rsplit("```", 1)[0].strip()
-
-    summaries = json.loads(response_text)
-    if not isinstance(summaries, list):
-        raise ValueError(f"Expected JSON array, got {type(summaries).__name__}")
-
-    summary_map = {}
-    for s in summaries:
-        if isinstance(s, dict) and "index" in s:
-            summary_map[s["index"]] = {
-                "summary": s.get("summary", ""),
-                "key_points": s.get("key_points", []),
-            }
-
-    usage = message.usage
-    return summary_map, usage.input_tokens, usage.output_tokens
-
-
-def summarize_articles(scored, config, threshold=4):
-    """Summarize high-scoring articles using LLM. Returns new list with summary_info attached."""
-    high = [a for a in scored if a["score"] >= threshold]
-    if not high:
-        log.info("  No articles above summary threshold.")
-        return [{**a, "summary_info": {}} for a in scored]
-
-    api_cfg = config["anthropic"]
-    client = anthropic.Anthropic(api_key=api_cfg["api_key"])
-    model = api_cfg.get("summary_model", api_cfg.get("scoring_model", "claude-haiku-4-5-20251001"))
-    max_tokens = api_cfg.get("max_tokens", 16384)
-
-    total_input = 0
-    total_output = 0
-    failed_batches = 0
-    summary_data = {}
-    total_batches = (len(high) + SUMMARY_BATCH_SIZE - 1) // SUMMARY_BATCH_SIZE
-
-    for start in range(0, len(high), SUMMARY_BATCH_SIZE):
-        batch = high[start:start + SUMMARY_BATCH_SIZE]
-        batch_num = start // SUMMARY_BATCH_SIZE + 1
-        log.info(f"  Summarizing batch {batch_num}/{total_batches} ({len(batch)} articles)...")
-
-        try:
-            smap, inp_tok, out_tok = _summarize_batch(batch, client, model, max_tokens)
-            total_input += inp_tok
-            total_output += out_tok
-            for i, a in enumerate(batch):
-                if i in smap:
-                    summary_data[a["link"]] = smap[i]
-        except (anthropic.APIError, json.JSONDecodeError, ValueError, KeyError) as e:
-            log.warning(f"  Summary batch {batch_num} failed: {e}")
-            failed_batches += 1
-
-    cost = (total_input * HAIKU_INPUT_COST + total_output * HAIKU_OUTPUT_COST) / 1_000_000
-    log.info(f"  Summary: {total_input} input + {total_output} output tokens = ${cost:.4f}")
-    if failed_batches:
-        log.warning(f"  {failed_batches}/{total_batches} summary batch(es) failed")
-
-    return [
-        {**a, "summary_info": summary_data.get(a["link"], {})}
-        for a in scored
-    ]
-
-
-def generate_summary_md(scored, today, threshold=4):
-    """Generate markdown summary for high-scoring articles."""
-    high = [a for a in scored if a["score"] >= threshold and a.get("summary_info")]
-    if not high:
-        return ""
-
-    total = len(scored)
-    lines = [
-        f"# Feeds Summary — {today}\n",
-        f"> {len(high)} articles with score >= {threshold} (out of {total} total)\n",
-    ]
-
-    for a in high:
-        lines.append("---\n")
-        lines.append(f"### {a['title']}\n")
-        authors = a.get("authors", "") or "N/A"
-        lines.append(f"**Authors:** {authors}  ")
-        lines.append(f"**Source:** {a['feed']} | **Score:** {a['score']}  ")
-        lines.append(f"[Read paper]({a['link']})\n")
-
-        info = a.get("summary_info", {})
-        if info.get("summary"):
-            lines.append(f"{info['summary']}\n")
-        if info.get("key_points"):
-            lines.append("**Key points:**")
-            for p in info["key_points"]:
-                lines.append(f"- {p}")
-            lines.append("")
-
-    return "\n".join(lines)
-
-
-def render_summary_html(md_text, today, ga_id=""):
-    """Convert summary markdown to a styled HTML page."""
-    import markdown
-
-    body = markdown.markdown(md_text, extensions=["extra"])
-
-    return f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Summary — {today}</title>
-{_ga_snippet(ga_id)}
-<style>
-body {{ font-family: system-ui, sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; color: #222; line-height: 1.6; }}
-h1 {{ font-size: 1.3em; }}
-h3 {{ margin-top: 1.5em; margin-bottom: 0.3em; }}
-hr {{ border: none; border-top: 1px solid #ddd; margin: 1.5em 0; }}
-blockquote {{ color: #555; border-left: 3px solid #ccc; margin: 0.5em 0; padding: 0.3em 1em; }}
-strong {{ color: #333; }}
-ul {{ padding-left: 1.5em; }}
-li {{ margin: 0.3em 0; }}
-a {{ color: #1a0dab; text-decoration: none; }}
-a:visited {{ color: #681da8; }}
-a:hover {{ text-decoration: underline; }}
-@media (max-width: 600px) {{
-  body {{ margin: 1em auto; padding: 0 0.5em; }}
-}}
-</style></head><body>
-<p><a href="index.html">&larr; All feeds</a></p>
-{body}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/contrib/auto-render.min.js"
-  onload="renderMathInElement(document.body,{{delimiters:[{{left:'$$',right:'$$',display:true}},{{left:'$',right:'$',display:false}},{{left:'\\\\(',right:'\\\\)',display:false}},{{left:'\\\\[',right:'\\\\]',display:true}}]}});">
-</script>
-</body></html>"""
-
-
-def deploy_summary(md, today, base_dir, ga_id=""):
-    """Write summary markdown and HTML to summaries/ directory."""
-    out_dir = base_dir / "summaries"
-    out_dir.mkdir(exist_ok=True)
-
-    md_path = out_dir / f"{today}.md"
-    md_path.write_text(md)
-    log.info(f"  Written summary to {md_path}")
-
-    html = render_summary_html(md, today, ga_id)
-    html_path = out_dir / f"{today}.html"
-    html_path.write_text(html)
-    log.info(f"  Written summary HTML to {html_path}")
-
-    return md_path
 
 
 def sort_by_opml(scored, feeds):
@@ -523,7 +350,7 @@ def _ga_snippet(ga_id):
     )
 
 
-def generate_html(scored_articles, today, ga_id="", summary_count=0):
+def generate_html(scored_articles, today, ga_id=""):
     """Generate static HTML page with articles grouped by folder/feed in OPML order."""
     from collections import OrderedDict
 
@@ -556,14 +383,6 @@ def generate_html(scored_articles, today, ga_id="", summary_count=0):
                     f"</tr>\n"
                 )
 
-    summary_link = ""
-    if summary_count > 0:
-        summary_link = (
-            f'<p class="summary-link">'
-            f'<a href="../summaries/{today}.html">Summary ({summary_count} articles)</a>'
-            f'</p>'
-        )
-
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Feeds — {today}</title>
 {_ga_snippet(ga_id)}
@@ -584,9 +403,6 @@ td {{ padding: 4px 8px; vertical-align: top; font-size: 0.9em; }}
 .s2 {{ background: #e0e0e0; }}
 .s1 {{ background: #f5f5f5; color: #999; }}
 .authors {{ display: block; font-size: 0.85em; color: #000; }}
-.summary-link {{ margin: 0.5em 0; }}
-.summary-link a {{ background: #1a73e8; color: #fff; padding: 6px 14px; border-radius: 4px; font-size: 0.9em; text-decoration: none; }}
-.summary-link a:hover {{ background: #1557b0; }}
 a {{ color: #1a0dab; text-decoration: none; }}
 a:visited {{ color: #681da8; }}
 a:hover {{ text-decoration: underline; }}
@@ -598,7 +414,6 @@ a:hover {{ text-decoration: underline; }}
 </style></head><body>
 <p><a href="index.html">&larr; All feeds</a></p>
 <h1>Feeds &mdash; {today}</h1>
-{summary_link}
 <table>{rows}</table>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>
@@ -670,74 +485,21 @@ a:hover {{ text-decoration: underline; }}
     (out_dir / "index.html").write_text(html)
 
 
-def deploy_to_github_pages(base_dir, gh_repo):
-    """Push html/ and summaries/ to the gh-pages branch of the given GitHub repo."""
-    html_dir = base_dir / "html"
-    summaries_dir = base_dir / "summaries"
-
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp)
-        # Clone gh-pages branch (shallow)
-        subprocess.run(
-            ["git", "clone", "--branch", "gh-pages", "--depth", "1",
-             f"https://github.com/{gh_repo}.git", str(tmp_path / "repo")],
-            check=True, capture_output=True, text=True,
-        )
-        repo = tmp_path / "repo"
-
-        # Copy html files (skip symlinks)
-        for f in html_dir.iterdir():
-            if f.is_file() and not f.is_symlink():
-                shutil.copy2(f, repo / f.name)
-
-        # Copy summaries
-        dest_summaries = repo / "summaries"
-        dest_summaries.mkdir(exist_ok=True)
-        if summaries_dir.exists():
-            for f in summaries_dir.iterdir():
-                if f.is_file():
-                    shutil.copy2(f, dest_summaries / f.name)
-
-        # Commit and push
-        subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
-        result = subprocess.run(
-            ["git", "diff", "--cached", "--quiet"], cwd=repo, capture_output=True,
-        )
-        if result.returncode == 0:
-            log.info("  No changes to deploy.")
-            return
-
-        today = datetime.now().strftime("%Y-%m-%d")
-        subprocess.run(
-            ["git", "commit", "-m", f"Deploy {today}"],
-            cwd=repo, check=True, capture_output=True, text=True,
-        )
-        subprocess.run(
-            ["git", "push"], cwd=repo, check=True, capture_output=True, text=True,
-        )
-        log.info(f"  Deployed to https://github.com/{gh_repo} (gh-pages)")
-
-
-def send_link_to_slack(config, today, has_summary=False):
-    """Send the daily feed link as a Slack DM."""
+def send_link_to_slack(config, today):
+    """Send just the link to Slack #journal-feed."""
     slack_cfg = config["slack"]
     client = WebClient(token=slack_cfg["bot_token"])
-    user_id = slack_cfg["user_id"]
+    channel = slack_cfg["channel"]
     base_url = config.get("deploy", {}).get("base_url", "https://example.com/feeds")
     url = f"{base_url}/{today}.html"
 
-    text = f"*Feeds — {today}*\n{url}"
-    if has_summary:
-        summary_url = f"{base_url}/summaries/{today}.html"
-        text += f"\n\n*Summary:* {summary_url}"
-
     client.chat_postMessage(
-        channel=user_id,
-        text=text,
+        channel=channel,
+        text=f"*Feeds — {today}*\n{url}",
         unfurl_links=False,
         unfurl_media=False,
     )
-    log.info(f"  Sent DM to {user_id}")
+    log.info(f"  Sent link to {channel}")
 
 
 def send_error_to_slack(config, error_msg):
@@ -755,110 +517,72 @@ def send_error_to_slack(config, error_msg):
 
 
 def cmd_curate(args, base_dir, config):
-    """curate subcommand: score → summarize → HTML + MD → Slack DM."""
+    """curate subcommand: score new articles → HTML → Slack."""
     feed_cfg = config.get("feeds", {})
     db_path = base_dir / feed_cfg.get("db", "feeds.db")
     opml_path = base_dir / feed_cfg.get("opml_file", "feeds.opml")
     today = datetime.now().strftime("%Y-%m-%d")
 
     conn = init_db(db_path)
-    has_summary = False
     try:
-        # Select articles published within the last 2 days
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
         rows = conn.execute(
-            "SELECT * FROM articles WHERE published >= ? ORDER BY id",
-            (cutoff,),
+            "SELECT * FROM articles WHERE curated=0 ORDER BY id"
         ).fetchall()
 
         articles = [dict(r) for r in rows]
-        log.info(f"[curate] {len(articles)} articles in the last 2 days.")
+        log.info(f"[curate] {len(articles)} new articles to process.")
 
         if not articles:
             log.info("[curate] Nothing to curate.")
             return
 
-        # Split: already scored vs needs scoring
-        to_score = [a for a in articles if a["score"] is None]
-        already_scored = [a for a in articles if a["score"] is not None]
-        log.info(f"[curate] {len(already_scored)} already scored, {len(to_score)} to score.")
-
-        # Score only new articles
-        topics = load_topics(base_dir / args.topics)
-        if to_score:
-            log.info("[curate] Scoring...")
-            newly_scored = score_articles(to_score, topics, config)
-
-            # Save scores to DB
-            for a in newly_scored:
-                conn.execute(
-                    "UPDATE articles SET score=? WHERE id=?",
-                    (a["score"], a["id"]),
-                )
-            conn.commit()
-        else:
-            newly_scored = []
-
-        # Combine: use cached scores for already-scored, fresh scores for new
-        scored = already_scored + newly_scored
+        # Score
+        profile = load_research_profile(base_dir / args.profile)
+        log.info("[curate] Scoring...")
+        scored = score_articles(articles, profile, config)
 
         # Sort by OPML order
         feeds = parse_opml(opml_path)
         scored = sort_by_opml(scored, feeds)
 
-        # Summarize high-scoring articles
-        threshold = topics.get("summary_threshold", 4)
-        log.info(f"[curate] Summarizing articles with score >= {threshold}...")
-        scored = summarize_articles(scored, config, threshold)
-
         # Generate HTML
-        summary_count = len([a for a in scored if a["score"] >= threshold and a.get("summary_info")])
         log.info("[curate] Generating HTML...")
         ga_id = config.get("analytics", {}).get("ga_id", "")
-        html = generate_html(scored, today, ga_id, summary_count)
+        html = generate_html(scored, today, ga_id)
         deploy_html(html, today, base_dir, ga_id)
 
-        # Generate summary markdown
-        summary_md = generate_summary_md(scored, today, threshold)
-        if summary_md:
-            deploy_summary(summary_md, today, base_dir, ga_id)
-            has_summary = True
+        # Mark as curated
+        ids = [a["id"] for a in articles]
+        conn.execute(
+            f"UPDATE articles SET curated=1 WHERE id IN ({','.join('?' * len(ids))})",
+            ids,
+        )
+        conn.commit()
     finally:
         conn.close()
 
-    # Deploy to GitHub Pages
-    deploy_cfg = config.get("deploy", {})
-    gh_repo = deploy_cfg.get("gh_repo")
-    if gh_repo and not args.dry_run:
-        log.info("[curate] Deploying to GitHub Pages...")
-        try:
-            deploy_to_github_pages(base_dir, gh_repo)
-        except Exception as e:
-            log.error(f"[curate] GitHub Pages deploy failed: {e}")
-            send_error_to_slack(config, f"GitHub Pages deploy failed:\n{e}")
-
-    # Slack DM (after DB is closed — failure here shouldn't affect curation state)
+    # Slack (after DB is closed — failure here shouldn't affect curation state)
     if args.dry_run:
         base_url = config.get("deploy", {}).get("base_url", "https://example.com/feeds")
         log.info(f"[curate] Dry run — URL would be: {base_url}/{today}.html")
     else:
-        log.info("[curate] Sending DM...")
+        log.info("[curate] Sending link to Slack...")
         try:
-            send_link_to_slack(config, today, has_summary)
+            send_link_to_slack(config, today)
         except SlackApiError as e:
-            log.error(f"[curate] Failed to send Slack DM: {e}")
-            send_error_to_slack(config, f"Curation succeeded but Slack DM failed:\n{e}")
+            log.error(f"[curate] Failed to send Slack notification: {e}")
+            send_error_to_slack(config, f"Curation succeeded but Slack notification failed:\n{e}")
         log.info("[curate] Done!")
 
 
 def main():
     parser = argparse.ArgumentParser(description="RSS Feed Recommender")
     parser.add_argument("--config", default="config.yaml", help="Config file path")
-    parser.add_argument("--topics", default="topics.yaml", help="Topics file path")
+    parser.add_argument("--profile", default="research_profile.yaml", help="Research profile path")
     parser.add_argument("--dry-run", action="store_true", help="Skip Slack notification")
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("fetch", help="Fetch RSS feeds into SQLite")
-    sub.add_parser("curate", help="Score, summarize, generate HTML, notify via DM")
+    sub.add_parser("curate", help="Score new articles, generate HTML, notify Slack")
     args = parser.parse_args()
 
     if not args.command:
