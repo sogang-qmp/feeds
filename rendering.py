@@ -9,54 +9,6 @@ from sources.rss import parse_opml
 log = logging.getLogger("feeds")
 
 
-def _recommendations_html(recommendations):
-    """Generate HTML section for AI-recommended papers."""
-    if not recommendations:
-        return ""
-
-    tiers = [
-        ("recent", "Recent Frontiers", "#0d7377", "#e6f7f7"),
-        ("classic", "Classic Foundations", "#b8860b", "#fdf6e3"),
-        ("exploratory", "Exploratory", "#6a1b9a", "#f3e5f5"),
-    ]
-
-    sections = ""
-    for tier_key, tier_label, accent, bg in tiers:
-        papers = [r for r in recommendations if r.get("tier") == tier_key]
-        if not papers:
-            continue
-
-        items = ""
-        for p in papers:
-            title = p.get("title", "")
-            url = p.get("url", "")
-            authors = p.get("authors", "")
-            ref = p.get("ref", "")
-            year = p.get("year", "")
-            why = p.get("why", "")
-
-            title_html = f'<a href="{url}" target="_blank" rel="noopener">{title}</a>' if url else title
-            ref_str = f"{ref} ({year})" if ref else str(year)
-
-            items += f"""<div class="rec-item">
-  <div class="rec-title">{title_html}</div>
-  <div class="rec-meta">{authors} &middot; {ref_str}</div>
-  <div class="rec-why">{why}</div>
-</div>
-"""
-
-        sections += f"""<div class="rec-tier" style="border-left: 4px solid {accent}; background: {bg};">
-  <div class="rec-tier-label" style="color: {accent};">{tier_label}</div>
-  {items}
-</div>
-"""
-
-    return f"""<div class="recommendations">
-  <h2 class="rec-heading">Recommended Reads</h2>
-  {sections}
-</div>
-"""
-
 
 def _ga_snippet(ga_id):
     """Return Google Analytics snippet if GA ID is configured."""
@@ -104,41 +56,51 @@ def _render_rss_section(articles):
     return f"<table>{rows}</table>"
 
 
-def _render_literature_section(articles):
-    """Render literature articles grouped by score descending."""
-    by_score = {}
-    for a in articles:
-        s = a.get("score", 1)
-        by_score.setdefault(s, []).append(a)
+def _render_literature_section(recommendations):
+    """Render LLM-curated paper recommendations as the Literature tab.
+
+    Uses the same tier-based layout (Recent Frontiers, Classic Foundations, Exploratory)
+    that was previously shown as "Recommended Reads" above the tabs.
+    """
+    if not recommendations:
+        return '<p class="empty-tab">No literature recommendations today.</p>'
+
+    tiers = [
+        ("recent", "Recent Frontiers", "#0d7377", "#e6f7f7"),
+        ("classic", "Classic Foundations", "#b8860b", "#fdf6e3"),
+        ("exploratory", "Exploratory", "#6a1b9a", "#f3e5f5"),
+    ]
 
     html = ""
-    for score in sorted(by_score.keys(), reverse=True):
-        items = by_score[score]
-        html += f'<h3 class="score-group">Score {score} <span class="count">({len(items)})</span></h3>\n'
-        for a in items:
-            title = a.get("title", "")
-            link = a.get("link", "")
-            authors = a.get("authors", "") or ""
-            venue = a.get("venue", "") or ""
-            year = a.get("year", "") or ""
-            cites = a.get("citation_count", "")
-            title_html = f'<a href="{link}" target="_blank" rel="noopener">{title}</a>' if link else title
-            venue_year = f"{venue} {year}".strip() if venue or year else ""
-            meta_parts = []
-            if authors:
-                meta_parts.append(authors)
-            if venue_year:
-                meta_parts.append(venue_year)
-            if cites not in ("", None):
-                meta_parts.append(f"Cites: {cites}")
-            meta_html = " &middot; ".join(meta_parts)
+    for tier_key, tier_label, accent, bg in tiers:
+        papers = [r for r in recommendations if r.get("tier") == tier_key]
+        if not papers:
+            continue
 
-            html += f'<div class="lit-item">'
-            html += f'<span class="score-badge s{score}">{score}</span>'
-            html += f'<div class="lit-detail"><div class="lit-title">{title_html}</div>'
-            if meta_html:
-                html += f'<div class="lit-meta">{meta_html}</div>'
-            html += f'</div></div>\n'
+        items = ""
+        for p in papers:
+            title = p.get("title", "")
+            url = p.get("url", "")
+            authors = p.get("authors", "")
+            ref = p.get("ref", "")
+            year = p.get("year", "")
+            why = p.get("why", "")
+
+            title_html = f'<a href="{url}" target="_blank" rel="noopener">{title}</a>' if url else title
+            ref_str = f"{ref} ({year})" if ref else str(year)
+
+            items += f"""<div class="rec-item">
+  <div class="rec-title">{title_html}</div>
+  <div class="rec-meta">{authors} &middot; {ref_str}</div>
+  <div class="rec-why">{why}</div>
+</div>
+"""
+
+        html += f"""<div class="rec-tier" style="border-left: 4px solid {accent}; background: {bg};">
+  <div class="rec-tier-label" style="color: {accent};">{tier_label}</div>
+  {items}
+</div>
+"""
 
     return html
 
@@ -181,34 +143,29 @@ def _render_github_section(articles):
 
 
 def generate_html(scored_articles, today, ga_id="", recommendations=None):
-    """Generate static HTML page with recommendations + articles grouped by folder/feed.
+    """Generate static HTML page with tabbed sections: RSS, Literature, GitHub.
 
-    Supports tabbed UI when literature or GitHub items are present.
-    Falls back to RSS-only layout when only RSS items exist.
+    Literature tab shows LLM-curated recommendations (~10 papers).
+    RSS tab shows scored feed articles.
+    GitHub tab shows profile-matched repos.
     """
-    rec_html = _recommendations_html(recommendations) if recommendations else ""
-
     # Split articles by source_type
-    rss_articles = []
-    lit_articles = []
-    gh_articles = []
-    for a in scored_articles:
-        st = a.get("source_type", "rss")
-        if st == "literature":
-            lit_articles.append(a)
-        elif st == "github":
-            gh_articles.append(a)
-        else:
-            rss_articles.append(a)
+    rss_articles = [a for a in scored_articles if a.get("source_type", "rss") == "rss"]
+    gh_articles = [a for a in scored_articles if a.get("source_type") == "github"]
 
-    has_tabs = len(lit_articles) > 0 or len(gh_articles) > 0
+    has_lit = recommendations and len(recommendations) > 0
+    has_gh = len(gh_articles) > 0
+    has_tabs = has_lit or has_gh
+
+    # Lit count = number of recommendations
+    lit_count = len(recommendations) if recommendations else 0
 
     # Build subtitle with counts
     count_parts = []
     if rss_articles:
         count_parts.append(f"{len(rss_articles)} articles")
-    if lit_articles:
-        count_parts.append(f"{len(lit_articles)} papers")
+    if lit_count:
+        count_parts.append(f"{lit_count} papers")
     if gh_articles:
         count_parts.append(f"{len(gh_articles)} repos")
     subtitle = " &middot; ".join(count_parts)
@@ -216,14 +173,14 @@ def generate_html(scored_articles, today, ga_id="", recommendations=None):
     # Build main content
     if has_tabs:
         rss_content = _render_rss_section(rss_articles) if rss_articles else '<p class="empty-tab">No RSS articles today.</p>'
-        lit_content = _render_literature_section(lit_articles) if lit_articles else '<p class="empty-tab">No literature items today.</p>'
+        lit_content = _render_literature_section(recommendations)
         gh_content = _render_github_section(gh_articles) if gh_articles else '<p class="empty-tab">No GitHub repos today.</p>'
 
         main_content = f"""<div class="tabs-wrapper">
 <input type="radio" id="tab-rss" name="tabs" checked>
 <label for="tab-rss">RSS <span class="tab-count">{len(rss_articles)}</span></label>
 <input type="radio" id="tab-lit" name="tabs">
-<label for="tab-lit">Literature <span class="tab-count">{len(lit_articles)}</span></label>
+<label for="tab-lit">Literature <span class="tab-count">{lit_count}</span></label>
 <input type="radio" id="tab-gh" name="tabs">
 <label for="tab-gh">GitHub <span class="tab-count">{len(gh_articles)}</span></label>
 <div class="tab-content" id="content-rss">{rss_content}</div>
@@ -293,9 +250,7 @@ def generate_html(scored_articles, today, ga_id="", recommendations=None):
 body {{ font-family: Georgia, Charter, serif; max-width: 960px; margin: 2em auto; padding: 0 1em; color: var(--fg); background: var(--bg); }}
 h1 {{ font-family: system-ui, -apple-system, sans-serif; font-size: 1.3em; margin-bottom: 0.2em; }}
 .subtitle {{ font-family: system-ui, -apple-system, sans-serif; font-size: 0.85em; color: var(--muted); margin-top: 0; }}
-/* --- Recommendations --- */
-.recommendations {{ margin-bottom: 2.5em; }}
-.rec-heading {{ font-family: system-ui, -apple-system, sans-serif; font-size: 1.15em; margin-bottom: 0.8em; color: #333; }}
+/* --- Literature tier items --- */
 .rec-tier {{ padding: 12px 16px; margin-bottom: 12px; border-radius: 6px; }}
 .rec-tier-label {{ font-weight: 700; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }}
 .rec-item {{ padding: 6px 0; }}
@@ -336,7 +291,6 @@ a:hover {{ text-decoration: underline; }}
 <p><a href="index.html">&larr; All feeds</a></p>
 <h1>Feeds &mdash; {today}</h1>
 {subtitle_html}
-{rec_html}
 {main_content}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>

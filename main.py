@@ -60,23 +60,22 @@ def load_research_profile(path="research_profile.yaml"):
 
 
 def cmd_fetch(args, base_dir, config):
-    """fetch subcommand: RSS/Literature/GitHub -> SQLite."""
+    """fetch subcommand: RSS/GitHub -> SQLite."""
     feed_cfg = config.get("feeds", {})
     opml_path = base_dir / feed_cfg.get("opml_file", "feeds.opml")
     db_path = base_dir / feed_cfg.get("db", "feeds.db")
 
     # Determine which sources to fetch
     do_rss = getattr(args, "rss", False)
-    do_lit = getattr(args, "lit", False)
     do_github = getattr(args, "github", False)
     do_all = getattr(args, "all", False)
 
     # Default (no flags): RSS only for backward compat
-    if not (do_rss or do_lit or do_github or do_all):
+    if not (do_rss or do_github or do_all):
         do_rss = True
 
     if do_all:
-        do_rss = do_lit = do_github = True
+        do_rss = do_github = True
 
     conn = init_db(db_path)
     try:
@@ -86,13 +85,6 @@ def cmd_fetch(args, base_dir, config):
             feeds = parse_opml(opml_path)
             log.info(f"[fetch] Fetching {len(feeds)} RSS feeds...")
             fetch_articles(feeds, conn)
-
-        if do_lit:
-            from sources.literature import fetch_literature
-            profile = load_research_profile(base_dir / args.profile)
-            log.info("[fetch] Fetching literature from Semantic Scholar...")
-            lit_count = fetch_literature(profile, conn, config)
-            log.info(f"[fetch] Literature: {lit_count} new papers.")
 
         if do_github:
             from sources.github import fetch_github
@@ -135,24 +127,24 @@ def cmd_curate(args, base_dir, config):
         log.info("[curate] Scoring...")
         scored = score_articles(articles, profile, config, notify_fn=send_error_to_slack)
 
-        # Sort RSS articles by OPML order; keep non-RSS separate
+        # Sort RSS articles by OPML order; keep GitHub separate
         rss_scored = [a for a in scored if a.get("source_type", "rss") == "rss"]
-        other_scored = [a for a in scored if a.get("source_type", "rss") != "rss"]
+        gh_scored = [a for a in scored if a.get("source_type") == "github"]
         if rss_scored:
             feeds = parse_opml(opml_path)
             rss_scored = sort_by_opml(rss_scored, feeds)
         else:
             feeds = parse_opml(opml_path) if opml_path.exists() else []
-        scored = rss_scored + other_scored
+        scored = rss_scored + gh_scored
 
-        # Recommendations
+        # Literature tab: LLM-curated recommendations (~10 papers)
         recommendations = None
-        log.info("[curate] Generating recommendations...")
+        log.info("[curate] Generating literature recommendations...")
         try:
             recommendations = recommend_articles(profile, base_dir)
-            log.info(f"[curate] Got {len(recommendations)} recommendations.")
+            log.info(f"[curate] Got {len(recommendations)} literature recommendations.")
         except Exception as e:
-            log.warning(f"[curate] Recommendations failed (proceeding without): {e}")
+            log.warning(f"[curate] Literature recommendations failed (proceeding without): {e}")
 
         # Generate HTML
         log.info("[curate] Generating HTML...")
@@ -192,9 +184,8 @@ def main():
     sub = parser.add_subparsers(dest="command")
     fetch_parser = sub.add_parser("fetch", help="Fetch articles into SQLite")
     fetch_parser.add_argument("--rss", action="store_true", help="Fetch RSS feeds only")
-    fetch_parser.add_argument("--lit", action="store_true", help="Fetch literature from Semantic Scholar")
     fetch_parser.add_argument("--github", action="store_true", help="Fetch trending GitHub repos")
-    fetch_parser.add_argument("--all", action="store_true", help="Fetch all sources")
+    fetch_parser.add_argument("--all", action="store_true", help="Fetch all sources (RSS + GitHub)")
     sub.add_parser("curate", help="Score new articles, generate HTML, notify Slack")
     args = parser.parse_args()
 
