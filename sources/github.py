@@ -62,12 +62,15 @@ def generate_queries(profile):
             for bucket in ("strong", "moderate"):
                 for k in kw.get(bucket, []):
                     kl = k.lower()
-                    if any(t in kl for t in ("vasp", "wannier", "epw", "berkeleygw",
+                    if any(t in kl for t in ("vasp", "wannier", "berkeleygw",
                                               "dft automation", "ab initio")):
                         tool_keywords.add(k)
+                    # EPW needs disambiguation — append context
+                    elif kl == "epw":
+                        tool_keywords.add("EPW electron-phonon coupling")
         for m in methods:
             ml = m.lower()
-            if any(t in ml for t in ("vasp", "wannier", "epw", "berkeleygw",
+            if any(t in ml for t in ("vasp", "wannier", "berkeleygw",
                                       "dft automation", "ab initio", "machine learning")):
                 tool_keywords.add(m)
 

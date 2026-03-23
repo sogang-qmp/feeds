@@ -95,10 +95,10 @@ def cmd_fetch(args, base_dir, config):
             log.info(f"[fetch] Literature: {lit_count} new papers.")
 
         if do_github:
-            from sources.github import fetch_github_repos
+            from sources.github import fetch_github
             profile = load_research_profile(base_dir / args.profile)
             log.info("[fetch] Fetching GitHub repos...")
-            gh_count = fetch_github_repos(profile, conn, config)
+            gh_count = fetch_github(profile, conn, config)
             log.info(f"[fetch] GitHub: {gh_count} new repos.")
 
         after = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]

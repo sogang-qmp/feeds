@@ -321,4 +321,4 @@ class TestFetchLiterature:
         # Should have called sleep between queries (n-1 times)
         queries = generate_queries(sample_profile)
         assert mock_sleep.call_count == len(queries) - 1
-        mock_sleep.assert_called_with(1.5)
+        mock_sleep.assert_called_with(3.5)

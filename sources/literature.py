@@ -72,8 +72,18 @@ def search_semantic_scholar(query, limit=20, year_range="2024-2026", api_key=Non
         headers["x-api-key"] = api_key
 
     try:
-        resp = requests.get(url, params=params, headers=headers, timeout=30)
-        resp.raise_for_status()
+        for attempt in range(3):
+            resp = requests.get(url, params=params, headers=headers, timeout=30)
+            if resp.status_code == 429:
+                wait = 5 * (attempt + 1)
+                log.info(f"[literature] Rate limited, waiting {wait}s...")
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            break
+        else:
+            log.warning(f"[literature] Rate limited after 3 retries for '{query}'")
+            return []
         data = resp.json()
     except Exception as e:
         log.warning(f"[literature] Semantic Scholar search failed for '{query}': {e}")
@@ -188,7 +198,7 @@ def fetch_literature(profile, conn, config=None):
 
         # Rate limit between queries
         if i < len(queries) - 1:
-            time.sleep(1.5)
+            time.sleep(3.5)  # S2 free tier: 100 req/5min
 
     log.info(f"[literature] Done. {inserted} new papers inserted.")
     return inserted
