@@ -199,7 +199,13 @@ def _build_profile_text(profile):
 
     def flatten(obj):
         if isinstance(obj, list):
-            return obj
+            items = []
+            for item in obj:
+                if isinstance(item, (dict, list)):
+                    items.extend(flatten(item))
+                else:
+                    items.append(str(item))
+            return items
         if isinstance(obj, dict):
             items = []
             for v in obj.values():
