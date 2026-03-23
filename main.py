@@ -135,9 +135,15 @@ def cmd_curate(args, base_dir, config):
         log.info("[curate] Scoring...")
         scored = score_articles(articles, profile, config, notify_fn=send_error_to_slack)
 
-        # Sort by OPML order
-        feeds = parse_opml(opml_path)
-        scored = sort_by_opml(scored, feeds)
+        # Sort RSS articles by OPML order; keep non-RSS separate
+        rss_scored = [a for a in scored if a.get("source_type", "rss") == "rss"]
+        other_scored = [a for a in scored if a.get("source_type", "rss") != "rss"]
+        if rss_scored:
+            feeds = parse_opml(opml_path)
+            rss_scored = sort_by_opml(rss_scored, feeds)
+        else:
+            feeds = parse_opml(opml_path) if opml_path.exists() else []
+        scored = rss_scored + other_scored
 
         # Recommendations
         recommendations = None
