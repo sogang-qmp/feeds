@@ -60,18 +60,47 @@ def load_research_profile(path="research_profile.yaml"):
 
 
 def cmd_fetch(args, base_dir, config):
-    """fetch subcommand: RSS -> SQLite."""
+    """fetch subcommand: RSS/Literature/GitHub -> SQLite."""
     feed_cfg = config.get("feeds", {})
     opml_path = base_dir / feed_cfg.get("opml_file", "feeds.opml")
     db_path = base_dir / feed_cfg.get("db", "feeds.db")
 
+    # Determine which sources to fetch
+    do_rss = getattr(args, "rss", False)
+    do_lit = getattr(args, "lit", False)
+    do_github = getattr(args, "github", False)
+    do_all = getattr(args, "all", False)
+
+    # Default (no flags): RSS only for backward compat
+    if not (do_rss or do_lit or do_github or do_all):
+        do_rss = True
+
+    if do_all:
+        do_rss = do_lit = do_github = True
+
     conn = init_db(db_path)
     try:
-        feeds = parse_opml(opml_path)
-        log.info(f"[fetch] Fetching {len(feeds)} feeds...")
-
         before = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
-        fetch_articles(feeds, conn)
+
+        if do_rss:
+            feeds = parse_opml(opml_path)
+            log.info(f"[fetch] Fetching {len(feeds)} RSS feeds...")
+            fetch_articles(feeds, conn)
+
+        if do_lit:
+            from sources.literature import fetch_literature
+            profile = load_research_profile(base_dir / args.profile)
+            log.info("[fetch] Fetching literature from Semantic Scholar...")
+            lit_count = fetch_literature(profile, conn, config)
+            log.info(f"[fetch] Literature: {lit_count} new papers.")
+
+        if do_github:
+            from sources.github import fetch_github_repos
+            profile = load_research_profile(base_dir / args.profile)
+            log.info("[fetch] Fetching GitHub repos...")
+            gh_count = fetch_github_repos(profile, conn, config)
+            log.info(f"[fetch] GitHub: {gh_count} new repos.")
+
         after = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
         new = after - before
         pending = conn.execute("SELECT COUNT(*) FROM articles WHERE curated=0").fetchone()[0]
@@ -155,7 +184,11 @@ def main():
     parser.add_argument("--profile", default="research_profile.yaml", help="Research profile path")
     parser.add_argument("--dry-run", action="store_true", help="Skip Slack notification")
     sub = parser.add_subparsers(dest="command")
-    sub.add_parser("fetch", help="Fetch RSS feeds into SQLite")
+    fetch_parser = sub.add_parser("fetch", help="Fetch articles into SQLite")
+    fetch_parser.add_argument("--rss", action="store_true", help="Fetch RSS feeds only")
+    fetch_parser.add_argument("--lit", action="store_true", help="Fetch literature from Semantic Scholar")
+    fetch_parser.add_argument("--github", action="store_true", help="Fetch trending GitHub repos")
+    fetch_parser.add_argument("--all", action="store_true", help="Fetch all sources")
     sub.add_parser("curate", help="Score new articles, generate HTML, notify Slack")
     args = parser.parse_args()
 
