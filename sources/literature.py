@@ -1,12 +1,18 @@
-"""Literature search via Semantic Scholar API."""
+"""Literature search via OpenAlex API.
+
+OpenAlex provides free access to scholarly metadata with generous rate limits
+(10,000 requests/day with polite pool). No API key required.
+"""
 
 import logging
-import time
 from datetime import datetime
 
 import requests
 
 log = logging.getLogger("feeds")
+
+OPENALEX_API = "https://api.openalex.org/works"
+MAILTO = "youngwoo9202@gmail.com"  # polite pool — higher rate limits
 
 
 def generate_queries(profile):
@@ -41,7 +47,6 @@ def generate_queries(profile):
     # Add 2-3 abbreviated primary research areas
     areas = profile.get("research_areas", {}).get("primary", [])
     for area in areas[:3]:
-        # Abbreviate: take first few words if long
         words = area.split()
         if len(words) > 4:
             abbreviated = " ".join(words[:4])
@@ -55,86 +60,109 @@ def generate_queries(profile):
     return queries[:15]
 
 
-def search_semantic_scholar(query, limit=20, year_range="2024-2026", api_key=None):
-    """Search Semantic Scholar API for papers matching query.
+def _reconstruct_abstract(inverted_index):
+    """Reconstruct abstract text from OpenAlex inverted index format."""
+    if not inverted_index:
+        return ""
+    # inverted_index = {"word": [pos1, pos2], ...}
+    words = {}
+    for word, positions in inverted_index.items():
+        for pos in positions:
+            words[pos] = word
+    if not words:
+        return ""
+    max_pos = max(words.keys())
+    return " ".join(words.get(i, "") for i in range(max_pos + 1))
 
-    Returns list of article dicts ready for DB insertion.
+
+def search_openalex(query, per_page=25, year_from=2024, mailto=MAILTO):
+    """Search OpenAlex for papers matching query.
+
+    Uses relevance_score sorting to get topically relevant results
+    rather than just highly-cited ones from any field.
     """
-    url = "https://api.semanticscholar.org/graph/v1/paper/search"
     params = {
-        "query": query,
-        "limit": limit,
-        "fields": "title,abstract,authors,year,externalIds,url,citationCount,venue",
-        "year": year_range,
+        "search": query,
+        "per_page": per_page,
+        "filter": f"publication_year:>{year_from - 1}",
+        "sort": "relevance_score:desc",
+        "mailto": mailto,
     }
-    headers = {}
-    if api_key:
-        headers["x-api-key"] = api_key
 
     try:
-        for attempt in range(3):
-            resp = requests.get(url, params=params, headers=headers, timeout=30)
-            if resp.status_code == 429:
-                wait = 5 * (attempt + 1)
-                log.info(f"[literature] Rate limited, waiting {wait}s...")
-                time.sleep(wait)
-                continue
-            resp.raise_for_status()
-            break
-        else:
-            log.warning(f"[literature] Rate limited after 3 retries for '{query}'")
-            return []
+        resp = requests.get(OPENALEX_API, params=params, timeout=30)
+        resp.raise_for_status()
         data = resp.json()
     except Exception as e:
-        log.warning(f"[literature] Semantic Scholar search failed for '{query}': {e}")
+        log.warning(f"[literature] OpenAlex search failed for '{query}': {e}")
         return []
 
-    papers = data.get("data", [])
     results = []
-    for paper in papers:
-        ext_ids = paper.get("externalIds") or {}
-        doi = ext_ids.get("DOI")
-        arxiv_id = ext_ids.get("ArXiv")
+    for work in data.get("results", []):
+        doi_url = work.get("doi") or ""
+        doi = doi_url.replace("https://doi.org/", "") if doi_url else ""
 
-        # Build link: prefer DOI, fallback arXiv, then S2 URL
-        if doi:
-            link = f"https://doi.org/{doi}"
+        # Extract arXiv ID from locations
+        arxiv_id = ""
+        for loc in work.get("locations") or []:
+            landing = loc.get("landing_page_url") or ""
+            if "arxiv.org" in landing:
+                # Extract ID from URL like https://arxiv.org/abs/2401.12345
+                parts = landing.rstrip("/").split("/")
+                if parts:
+                    arxiv_id = parts[-1]
+                break
+
+        # Build link: prefer DOI, fallback arXiv, then OpenAlex
+        if doi_url:
+            link = doi_url
         elif arxiv_id:
             link = f"https://arxiv.org/abs/{arxiv_id}"
         else:
-            link = paper.get("url", "")
+            link = work.get("id", "")  # OpenAlex URL
 
         if not link:
             continue
 
-        # Normalize authors: first 5 + "et al."
-        raw_authors = paper.get("authors") or []
-        author_names = [a.get("name", "") for a in raw_authors if a.get("name")]
+        # Authors: first 5 + "et al."
+        authorships = work.get("authorships") or []
+        author_names = []
+        for a in authorships:
+            name = a.get("author", {}).get("display_name", "")
+            if name:
+                author_names.append(name)
         if len(author_names) > 5:
             authors_str = ", ".join(author_names[:5]) + " et al."
         else:
             authors_str = ", ".join(author_names)
 
-        # Truncate abstract to 500 chars
-        abstract = paper.get("abstract") or ""
+        # Abstract: reconstruct from inverted index
+        abstract = _reconstruct_abstract(work.get("abstract_inverted_index"))
         if len(abstract) > 500:
             abstract = abstract[:500] + "..."
 
-        venue = paper.get("venue") or ""
+        # Venue: primary source
+        venue = ""
+        primary_loc = work.get("primary_location") or {}
+        source = primary_loc.get("source") or {}
+        venue = source.get("display_name") or ""
+
+        year = work.get("publication_year")
+        cites = work.get("cited_by_count") or 0
 
         results.append({
             "link": link,
-            "title": paper.get("title") or "",
+            "title": work.get("title") or "",
             "authors": authors_str,
             "summary": abstract,
-            "published": datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+            "published": work.get("publication_date") or f"{year}-01-01",
             "venue": venue,
-            "year": paper.get("year"),
+            "year": year,
             "doi": doi,
             "arxiv_id": arxiv_id,
-            "citation_count": paper.get("citationCount") or 0,
+            "citation_count": cites,
             "source_type": "literature",
-            "feed": venue or "Semantic Scholar",
+            "feed": venue or "OpenAlex",
             "folder": "",
         })
 
@@ -142,30 +170,35 @@ def search_semantic_scholar(query, limit=20, year_range="2024-2026", api_key=Non
 
 
 def fetch_literature(profile, conn, config=None):
-    """Fetch literature from Semantic Scholar and insert into DB.
+    """Fetch literature from OpenAlex and insert into DB.
 
     Args:
         profile: Research profile dict (from research_profile.yaml)
         conn: SQLite connection
-        config: Optional config dict for API key and settings
+        config: Optional config dict for settings
 
     Returns:
         Count of new papers inserted
     """
     config = config or {}
     lit_cfg = config.get("literature", {})
-    api_key = lit_cfg.get("semantic_scholar_api_key")
     year_range = lit_cfg.get("year_range", "2024-2026")
-    max_results = lit_cfg.get("max_results_per_query", 20)
+    max_results = lit_cfg.get("max_results_per_query", 25)
+
+    # Parse year_from from year_range like "2024-2026"
+    try:
+        year_from = int(year_range.split("-")[0])
+    except (ValueError, IndexError):
+        year_from = 2024
 
     queries = generate_queries(profile)
-    log.info(f"[literature] Searching {len(queries)} queries...")
+    log.info(f"[literature] Searching {len(queries)} queries via OpenAlex...")
 
     inserted = 0
     for i, query in enumerate(queries):
-        papers = search_semantic_scholar(
-            query, limit=max_results, year_range=year_range, api_key=api_key
-        )
+        log.info(f"  [{i+1}/{len(queries)}] '{query}'")
+        papers = search_openalex(query, per_page=max_results, year_from=year_from)
+
         for paper in papers:
             try:
                 conn.execute(
@@ -193,12 +226,8 @@ def fetch_literature(profile, conn, config=None):
                 if conn.execute("SELECT changes()").fetchone()[0] > 0:
                     inserted += 1
             except Exception as e:
-                log.warning(f"[literature] Failed to insert paper '{paper.get('title', '')}': {e}")
+                log.warning(f"[literature] Insert failed: {e}")
         conn.commit()
-
-        # Rate limit between queries
-        if i < len(queries) - 1:
-            time.sleep(3.5)  # S2 free tier: 100 req/5min
 
     log.info(f"[literature] Done. {inserted} new papers inserted.")
     return inserted

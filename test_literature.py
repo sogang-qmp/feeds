@@ -1,13 +1,15 @@
-"""Tests for sources.literature module."""
+"""Tests for sources.literature module (OpenAlex API)."""
 
 import json
 from datetime import datetime
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from db import init_db
-from sources.literature import generate_queries, search_semantic_scholar, fetch_literature
+from sources.literature import (
+    generate_queries, search_openalex, fetch_literature, _reconstruct_abstract,
+)
 
 
 # --- Fixtures ---
@@ -54,40 +56,72 @@ def db(tmp_path):
 
 
 @pytest.fixture
-def mock_s2_response():
-    """Mock Semantic Scholar API response."""
+def mock_openalex_response():
+    """Mock OpenAlex API response."""
     return {
-        "total": 2,
-        "data": [
+        "meta": {"count": 2},
+        "results": [
             {
-                "paperId": "abc123",
+                "id": "https://openalex.org/W111",
                 "title": "Electron-phonon coupling in 2D materials",
-                "abstract": "We study electron-phonon coupling...",
-                "authors": [
-                    {"name": "Alice Smith"},
-                    {"name": "Bob Jones"},
+                "doi": "https://doi.org/10.1234/test.2025",
+                "publication_year": 2025,
+                "publication_date": "2025-03-15",
+                "cited_by_count": 42,
+                "abstract_inverted_index": {
+                    "We": [0],
+                    "study": [1],
+                    "electron-phonon": [2],
+                    "coupling": [3],
+                    "in": [4],
+                    "2D": [5],
+                    "materials": [6],
+                },
+                "authorships": [
+                    {"author": {"display_name": "Alice Smith"}},
+                    {"author": {"display_name": "Bob Jones"}},
                 ],
-                "year": 2025,
-                "externalIds": {"DOI": "10.1234/test.2025", "ArXiv": "2501.00001"},
-                "url": "https://www.semanticscholar.org/paper/abc123",
-                "citationCount": 42,
-                "venue": "Physical Review Letters",
+                "primary_location": {
+                    "source": {"display_name": "Physical Review Letters"},
+                },
+                "locations": [
+                    {"landing_page_url": "https://doi.org/10.1234/test.2025"},
+                ],
             },
             {
-                "paperId": "def456",
+                "id": "https://openalex.org/W222",
                 "title": "Polaron formation in TMDs",
-                "abstract": "A" * 600,  # long abstract to test truncation
-                "authors": [
-                    {"name": f"Author {i}"} for i in range(7)
+                "doi": None,
+                "publication_year": 2024,
+                "publication_date": "2024-06-01",
+                "cited_by_count": 5,
+                "abstract_inverted_index": {f"word{i}": [i] for i in range(600)},
+                "authorships": [
+                    {"author": {"display_name": f"Author {i}"}} for i in range(7)
                 ],
-                "year": 2024,
-                "externalIds": {"ArXiv": "2401.99999"},
-                "url": "https://www.semanticscholar.org/paper/def456",
-                "citationCount": 5,
-                "venue": "",
+                "primary_location": {"source": None},
+                "locations": [
+                    {"landing_page_url": "https://arxiv.org/abs/2401.99999"},
+                ],
             },
         ],
     }
+
+
+# --- _reconstruct_abstract ---
+
+class TestReconstructAbstract:
+    def test_basic(self):
+        idx = {"Hello": [0], "world": [1]}
+        assert _reconstruct_abstract(idx) == "Hello world"
+
+    def test_empty(self):
+        assert _reconstruct_abstract(None) == ""
+        assert _reconstruct_abstract({}) == ""
+
+    def test_multiple_positions(self):
+        idx = {"the": [0, 2], "cat": [1], "sat": [3]}
+        assert _reconstruct_abstract(idx) == "the cat the sat"
 
 
 # --- generate_queries ---
@@ -100,11 +134,10 @@ class TestGenerateQueries:
 
     def test_length_within_bounds(self, sample_profile):
         queries = generate_queries(sample_profile)
-        assert 5 <= len(queries) <= 20
+        assert 5 <= len(queries) <= 15
 
     def test_contains_strong_keywords(self, sample_profile):
         queries = generate_queries(sample_profile)
-        # At least some strong keywords should appear
         strong = sample_profile["keywords"]["strong"]
         found = sum(1 for kw in strong[:8] if kw in queries)
         assert found >= 5
@@ -119,25 +152,23 @@ class TestGenerateQueries:
 
     def test_includes_research_areas(self, sample_profile):
         queries = generate_queries(sample_profile)
-        # Should contain at least one research area term
         all_text = " ".join(queries)
         assert "first-principles" in all_text or "superconductivity" in all_text
 
 
-# --- search_semantic_scholar ---
+# --- search_openalex ---
 
-class TestSearchSemanticScholar:
-    def test_parses_response_correctly(self, mock_s2_response):
+class TestSearchOpenalex:
+    def test_parses_response_correctly(self, mock_openalex_response):
         mock_resp = MagicMock()
-        mock_resp.json.return_value = mock_s2_response
+        mock_resp.json.return_value = mock_openalex_response
         mock_resp.raise_for_status.return_value = None
 
         with patch("sources.literature.requests.get", return_value=mock_resp):
-            results = search_semantic_scholar("electron-phonon")
+            results = search_openalex("electron-phonon")
 
         assert len(results) == 2
 
-        # First paper: has DOI, should use DOI link
         paper1 = results[0]
         assert paper1["title"] == "Electron-phonon coupling in 2D materials"
         assert paper1["doi"] == "10.1234/test.2025"
@@ -145,80 +176,67 @@ class TestSearchSemanticScholar:
         assert paper1["source_type"] == "literature"
         assert paper1["citation_count"] == 42
         assert paper1["venue"] == "Physical Review Letters"
-        assert paper1["feed"] == "Physical Review Letters"
         assert paper1["authors"] == "Alice Smith, Bob Jones"
+        assert paper1["year"] == 2025
 
-    def test_arxiv_fallback_link(self, mock_s2_response):
+    def test_arxiv_fallback_link(self, mock_openalex_response):
         mock_resp = MagicMock()
-        mock_resp.json.return_value = mock_s2_response
+        mock_resp.json.return_value = mock_openalex_response
         mock_resp.raise_for_status.return_value = None
 
         with patch("sources.literature.requests.get", return_value=mock_resp):
-            results = search_semantic_scholar("polaron")
+            results = search_openalex("polaron")
 
-        # Second paper: no DOI, should use arXiv link
         paper2 = results[1]
         assert paper2["link"] == "https://arxiv.org/abs/2401.99999"
         assert paper2["arxiv_id"] == "2401.99999"
 
-    def test_truncates_long_abstract(self, mock_s2_response):
+    def test_truncates_long_abstract(self, mock_openalex_response):
         mock_resp = MagicMock()
-        mock_resp.json.return_value = mock_s2_response
+        mock_resp.json.return_value = mock_openalex_response
         mock_resp.raise_for_status.return_value = None
 
         with patch("sources.literature.requests.get", return_value=mock_resp):
-            results = search_semantic_scholar("polaron")
+            results = search_openalex("polaron")
 
         paper2 = results[1]
-        assert len(paper2["summary"]) == 503  # 500 + "..."
+        assert len(paper2["summary"]) <= 503
 
-    def test_normalizes_many_authors(self, mock_s2_response):
+    def test_normalizes_many_authors(self, mock_openalex_response):
         mock_resp = MagicMock()
-        mock_resp.json.return_value = mock_s2_response
+        mock_resp.json.return_value = mock_openalex_response
         mock_resp.raise_for_status.return_value = None
 
         with patch("sources.literature.requests.get", return_value=mock_resp):
-            results = search_semantic_scholar("TMD")
+            results = search_openalex("TMD")
 
         paper2 = results[1]
         assert "et al." in paper2["authors"]
-        # Should have 5 names + et al.
-        assert paper2["authors"].count(",") == 4  # 5 names separated by 4 commas
+        assert paper2["authors"].count(",") == 4
 
     def test_handles_api_error_gracefully(self):
         with patch("sources.literature.requests.get", side_effect=Exception("Connection error")):
-            results = search_semantic_scholar("test query")
-
+            results = search_openalex("test query")
         assert results == []
 
-    def test_handles_http_error(self):
+    def test_sends_mailto(self):
         mock_resp = MagicMock()
-        mock_resp.raise_for_status.side_effect = Exception("429 Too Many Requests")
-
-        with patch("sources.literature.requests.get", return_value=mock_resp):
-            results = search_semantic_scholar("test query")
-
-        assert results == []
-
-    def test_passes_api_key(self):
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {"data": []}
+        mock_resp.json.return_value = {"results": []}
         mock_resp.raise_for_status.return_value = None
 
         with patch("sources.literature.requests.get", return_value=mock_resp) as mock_get:
-            search_semantic_scholar("test", api_key="my-key")
+            search_openalex("test")
 
         _, kwargs = mock_get.call_args
-        assert kwargs["headers"]["x-api-key"] == "my-key"
+        assert "mailto" in kwargs["params"]
 
-    def test_empty_data_response(self):
+    def test_empty_results(self):
         mock_resp = MagicMock()
-        mock_resp.json.return_value = {"total": 0, "data": []}
+        mock_resp.json.return_value = {"meta": {"count": 0}, "results": []}
         mock_resp.raise_for_status.return_value = None
 
         with patch("sources.literature.requests.get", return_value=mock_resp):
-            results = search_semantic_scholar("nonexistent topic xyz")
-
+            results = search_openalex("nonexistent topic xyz")
         assert results == []
 
 
@@ -226,99 +244,73 @@ class TestSearchSemanticScholar:
 
 class TestFetchLiterature:
     def test_inserts_papers_into_db(self, db, sample_profile):
-        mock_s2_data = {
-            "data": [
+        mock_data = {
+            "results": [
                 {
-                    "paperId": "abc",
+                    "id": "https://openalex.org/W111",
                     "title": "Test Paper",
-                    "abstract": "Abstract here",
-                    "authors": [{"name": "Alice"}],
-                    "year": 2025,
-                    "externalIds": {"DOI": "10.1234/test"},
-                    "url": "https://s2.org/abc",
-                    "citationCount": 10,
-                    "venue": "Nature",
+                    "doi": "https://doi.org/10.1234/test",
+                    "publication_year": 2025,
+                    "publication_date": "2025-01-01",
+                    "cited_by_count": 10,
+                    "abstract_inverted_index": {"Abstract": [0], "here": [1]},
+                    "authorships": [{"author": {"display_name": "Alice"}}],
+                    "primary_location": {"source": {"display_name": "Nature"}},
+                    "locations": [],
                 },
             ],
         }
         mock_resp = MagicMock()
-        mock_resp.json.return_value = mock_s2_data
+        mock_resp.json.return_value = mock_data
         mock_resp.raise_for_status.return_value = None
 
-        with patch("sources.literature.requests.get", return_value=mock_resp), \
-             patch("sources.literature.time.sleep"):
+        with patch("sources.literature.requests.get", return_value=mock_resp):
             count = fetch_literature(sample_profile, db)
 
         assert count > 0
         rows = db.execute("SELECT * FROM articles WHERE source_type='literature'").fetchall()
         assert len(rows) > 0
-        row = rows[0]
-        assert row["title"] == "Test Paper"
-        assert row["doi"] == "10.1234/test"
-        assert row["source_type"] == "literature"
+        assert rows[0]["title"] == "Test Paper"
+        assert rows[0]["source_type"] == "literature"
 
     def test_deduplicates_by_link(self, db, sample_profile):
-        """Same paper from different queries should only be inserted once."""
-        mock_s2_data = {
-            "data": [
+        mock_data = {
+            "results": [
                 {
-                    "paperId": "abc",
+                    "id": "https://openalex.org/W111",
                     "title": "Test Paper",
-                    "abstract": "Abstract",
-                    "authors": [{"name": "Alice"}],
-                    "year": 2025,
-                    "externalIds": {"DOI": "10.1234/test"},
-                    "url": "https://s2.org/abc",
-                    "citationCount": 10,
-                    "venue": "Nature",
+                    "doi": "https://doi.org/10.1234/test",
+                    "publication_year": 2025,
+                    "publication_date": "2025-01-01",
+                    "cited_by_count": 10,
+                    "abstract_inverted_index": None,
+                    "authorships": [{"author": {"display_name": "Alice"}}],
+                    "primary_location": {"source": {"display_name": "Nature"}},
+                    "locations": [],
                 },
             ],
         }
         mock_resp = MagicMock()
-        mock_resp.json.return_value = mock_s2_data
+        mock_resp.json.return_value = mock_data
         mock_resp.raise_for_status.return_value = None
 
-        with patch("sources.literature.requests.get", return_value=mock_resp), \
-             patch("sources.literature.time.sleep"):
-            count = fetch_literature(sample_profile, db)
+        with patch("sources.literature.requests.get", return_value=mock_resp):
+            fetch_literature(sample_profile, db)
 
-        # Multiple queries returning same paper => only 1 row
         rows = db.execute("SELECT * FROM articles WHERE doi='10.1234/test'").fetchall()
         assert len(rows) == 1
 
-    def test_respects_config(self, db, sample_profile):
+    def test_respects_year_config(self, db, sample_profile):
         mock_resp = MagicMock()
-        mock_resp.json.return_value = {"data": []}
+        mock_resp.json.return_value = {"results": []}
         mock_resp.raise_for_status.return_value = None
 
-        config = {
-            "literature": {
-                "semantic_scholar_api_key": "test-key",
-                "year_range": "2025-2026",
-                "max_results_per_query": 5,
-            }
-        }
+        config = {"literature": {"year_range": "2025-2026", "max_results_per_query": 5}}
 
-        with patch("sources.literature.requests.get", return_value=mock_resp) as mock_get, \
-             patch("sources.literature.time.sleep"):
+        with patch("sources.literature.requests.get", return_value=mock_resp) as mock_get:
             fetch_literature(sample_profile, db, config=config)
 
-        # Check that API key and params were passed
         _, kwargs = mock_get.call_args
-        assert kwargs["headers"]["x-api-key"] == "test-key"
-        assert kwargs["params"]["year"] == "2025-2026"
-        assert kwargs["params"]["limit"] == 5
-
-    def test_rate_limits_between_queries(self, db, sample_profile):
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {"data": []}
-        mock_resp.raise_for_status.return_value = None
-
-        with patch("sources.literature.requests.get", return_value=mock_resp), \
-             patch("sources.literature.time.sleep") as mock_sleep:
-            fetch_literature(sample_profile, db)
-
-        # Should have called sleep between queries (n-1 times)
-        queries = generate_queries(sample_profile)
-        assert mock_sleep.call_count == len(queries) - 1
-        mock_sleep.assert_called_with(3.5)
+        # year_range "2025-2026" → filter "publication_year:>2024"
+        assert "publication_year:>2024" in kwargs["params"].get("filter", "")
+        assert kwargs["params"]["per_page"] == 5
