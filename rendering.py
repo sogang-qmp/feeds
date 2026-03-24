@@ -114,7 +114,7 @@ def _render_github_section(articles):
 
     html = ""
     for score in sorted(by_score.keys(), reverse=True):
-        items = sorted(by_score[score], key=lambda a: a.get("velocity", 0), reverse=True)
+        items = sorted(by_score[score], key=lambda a: a.get("velocity") or 0, reverse=True)
         html += f'<h3 class="score-group">Score {score} <span class="count">({len(items)})</span></h3>\n'
         for a in items:
             title = a.get("title", "")
