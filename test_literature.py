@@ -134,17 +134,26 @@ class TestGenerateQueries:
 
     def test_length_within_bounds(self, sample_profile):
         queries = generate_queries(sample_profile)
-        assert 5 <= len(queries) <= 15
+        assert 5 <= len(queries) <= 18
 
     def test_contains_strong_keywords(self, sample_profile):
         queries = generate_queries(sample_profile)
         strong = sample_profile["keywords"]["strong"]
-        found = sum(1 for kw in strong[:8] if kw in queries)
-        assert found >= 5
+        found = sum(1 for kw in strong[:6] if kw in queries)
+        assert found >= 4
 
-    def test_max_15_queries(self, sample_profile):
+    def test_max_18_queries(self, sample_profile):
         queries = generate_queries(sample_profile)
-        assert len(queries) <= 15
+        assert len(queries) <= 18
+
+    def test_includes_current_interests_queries(self, sample_profile):
+        sample_profile["current_interests"] = [
+            {"topic": "AI agents for physics", "weight": "high",
+             "examples": ["vibe physics", "autonomous simulation"]},
+        ]
+        queries = generate_queries(sample_profile)
+        combined = " ".join(queries).lower()
+        assert "ai agents" in combined or "vibe physics" in combined or "autonomous" in combined
 
     def test_empty_profile(self):
         queries = generate_queries({})

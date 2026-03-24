@@ -141,7 +141,7 @@ def cmd_curate(args, base_dir, config):
         recommendations = None
         log.info("[curate] Generating literature recommendations...")
         try:
-            recommendations = recommend_articles(profile, base_dir)
+            recommendations = recommend_articles(profile, base_dir, config)
             log.info(f"[curate] Got {len(recommendations)} literature recommendations.")
         except Exception as e:
             log.warning(f"[curate] Literature recommendations failed (proceeding without): {e}")

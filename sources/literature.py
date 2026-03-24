@@ -16,21 +16,33 @@ MAILTO = "youngwoo9202@gmail.com"  # polite pool — higher rate limits
 
 
 def generate_queries(profile):
-    """Generate 10-15 search queries from research profile keywords.
+    """Generate 12-18 search queries from research profile.
 
     Strategy:
-    - Top 8 strong keywords as standalone queries
+    - Current interests: topic + examples as queries (high weight first)
+    - Top 6 strong keywords as standalone queries
     - Cross-topic pairs from strong keywords (every 3rd pair)
-    - 2-3 abbreviated primary research areas
-    - Max 15 queries total
+    - 2 abbreviated primary research areas
+    - Max 18 queries total
     """
     queries = []
+
+    # Current interests first (highest priority)
+    interests = profile.get("current_interests", [])
+    high = [ci for ci in interests if ci.get("weight") == "high"]
+    medium = [ci for ci in interests if ci.get("weight") != "high"]
+    for ci in high + medium:
+        topic = ci.get("topic", "")
+        if topic:
+            queries.append(topic)
+        for ex in ci.get("examples", [])[:2]:
+            queries.append(ex)
 
     keywords = profile.get("keywords", {})
     strong = keywords.get("strong", [])
 
-    # Top 8 strong keywords as standalone queries
-    for kw in strong[:8]:
+    # Top 6 strong keywords as standalone queries
+    for kw in strong[:6]:
         queries.append(kw)
 
     # Cross-topic pairs from strong keywords (every 3rd pair)
@@ -41,23 +53,18 @@ def generate_queries(profile):
     for idx, (a, b) in enumerate(pairs):
         if idx % 3 == 0:
             queries.append(f"{a} {b}")
-        if len(queries) >= 13:
+        if len(queries) >= 16:
             break
 
-    # Add 2-3 abbreviated primary research areas
+    # Add 2 abbreviated primary research areas
     areas = profile.get("research_areas", {}).get("primary", [])
-    for area in areas[:3]:
+    for area in areas[:2]:
         words = area.split()
-        if len(words) > 4:
-            abbreviated = " ".join(words[:4])
-        else:
-            abbreviated = area
+        abbreviated = " ".join(words[:4]) if len(words) > 4 else area
         if abbreviated not in queries:
             queries.append(abbreviated)
-        if len(queries) >= 15:
-            break
 
-    return queries[:15]
+    return queries[:18]
 
 
 def _reconstruct_abstract(inverted_index):
@@ -75,17 +82,18 @@ def _reconstruct_abstract(inverted_index):
     return " ".join(words.get(i, "") for i in range(max_pos + 1))
 
 
-def search_openalex(query, per_page=25, year_from=2024, mailto=MAILTO):
+def search_openalex(query, per_page=25, year_from=2024, mailto=MAILTO, sort="relevance_score:desc"):
     """Search OpenAlex for papers matching query.
 
-    Uses relevance_score sorting to get topically relevant results
-    rather than just highly-cited ones from any field.
+    Args:
+        sort: OpenAlex sort field. Default relevance_score:desc.
+              Use "cited_by_count:desc" for high-citation classics.
     """
     params = {
         "search": query,
         "per_page": per_page,
         "filter": f"publication_year:>{year_from - 1}",
-        "sort": "relevance_score:desc",
+        "sort": sort,
         "mailto": mailto,
     }
 
