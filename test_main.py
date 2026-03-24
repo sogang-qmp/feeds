@@ -107,11 +107,18 @@ def sample_profile():
         },
         "research_areas": {
             "primary": ["condensed matter", "DFT"],
+            "methods": ["DFT", "machine learning"],
         },
         "keywords": {
             "strong": ["phonon", "graphene"],
+            "moderate": ["VASP"],
             "weak": ["physics"],
         },
+        "current_interests": [
+            {"topic": "AI agents for physics", "weight": "high",
+             "examples": ["vibe physics", "autonomous simulation"]},
+            {"topic": "moiré phonons", "weight": "medium"},
+        ],
     }
 
 
@@ -336,6 +343,18 @@ class TestBuildProfileText:
     def test_empty_profile(self):
         text = build_profile_text({})
         assert "N/A" in text
+
+    def test_includes_current_interests(self, sample_profile):
+        text = build_profile_text(sample_profile)
+        assert "AI agents for physics" in text
+        assert "HIGH PRIORITY" in text
+        assert "moiré phonons" in text
+
+    def test_no_current_interests(self):
+        profile = {"researcher": {"name": "X"}, "research_areas": {}, "keywords": {}}
+        text = build_profile_text(profile)
+        assert "Current interests" not in text
+        assert "N/A" in text or "X" in text
 
 
 # --- _score_batch ---

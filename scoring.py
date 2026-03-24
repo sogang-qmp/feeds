@@ -39,6 +39,19 @@ def build_profile_text(profile):
         f"Research areas: {', '.join(flatten(areas))}\n"
         f"Keywords: {', '.join(flatten(keywords))}\n"
     )
+
+    # Current interests get prominent placement
+    interests = profile.get("current_interests", [])
+    if interests:
+        text += "\nCurrent interests (score these HIGHER):\n"
+        for ci in interests:
+            weight = ci.get("weight", "medium").upper()
+            topic = ci.get("topic", "")
+            examples = ci.get("examples", [])
+            text += f"  [{weight} PRIORITY] {topic}\n"
+            if examples:
+                text += f"    Examples: {', '.join(examples)}\n"
+
     scoring_prompt = profile.get("scoring_prompt", "")
     if scoring_prompt:
         text += f"\nScoring guidance:\n{scoring_prompt}"
