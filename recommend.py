@@ -52,7 +52,7 @@ Search the web for articles relevant to this researcher and recommend them in th
 
 | Tier | Count | Criteria |
 |---|---|---|
-| **recent** | 5 | Published 2024–2026, on active research frontiers |
+| **recent** | 5 | Published 2024–2026, recent articles on active research topics |
 | **classic** | 5 | Foundational papers underpinning the methods or materials |
 | **exploratory** | 2 | Outside the researcher's current scope but high-potential intersection — find surprising connections |
 

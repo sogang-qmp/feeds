@@ -59,14 +59,14 @@ def _render_rss_section(articles):
 def _render_literature_section(recommendations):
     """Render LLM-curated paper recommendations as the Literature tab.
 
-    Uses the same tier-based layout (Recent Frontiers, Classic Foundations, Exploratory)
+    Uses the same tier-based layout (Recent Articles, Classic Foundations, Exploratory)
     that was previously shown as "Recommended Reads" above the tabs.
     """
     if not recommendations:
         return '<p class="empty-tab">No literature recommendations today.</p>'
 
     tiers = [
-        ("recent", "Recent Frontiers", "#0d7377", "#e6f7f7"),
+        ("recent", "Recent Articles", "#0d7377", "#e6f7f7"),
         ("classic", "Classic Foundations", "#b8860b", "#fdf6e3"),
         ("exploratory", "Exploratory", "#6a1b9a", "#f3e5f5"),
     ]

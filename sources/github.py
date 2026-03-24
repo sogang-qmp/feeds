@@ -3,11 +3,27 @@
 import json
 import logging
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 log = logging.getLogger("feeds")
 
-# Cross-domain queries: ML/AI + physics/materials
+# AI/ML + physics/materials cross-domain queries (higher weight — listed first)
+_AI_PHYSICS_QUERIES = [
+    "machine learning interatomic potential",
+    "graph neural network materials",
+    "deep learning DFT",
+    "AI molecular dynamics",
+    "neural network force field",
+    "machine learning electron-phonon",
+    "foundation model materials science",
+    "LLM chemistry",
+    "AI agent scientific simulation",
+    "agentic workflow physics",
+    "LLM agent materials discovery",
+    "autonomous lab simulation",
+]
+
+# Cross-domain queries: ML/AI + physics/materials (legacy pairs)
 _ML_PHYSICS_PAIRS = [
     ("machine learning", "DFT"),
     ("neural network", "phonon"),
@@ -40,17 +56,19 @@ _METHOD_QUERIES = [
 def generate_queries(profile):
     """Generate GitHub search queries from researcher profile.
 
-    Focuses on AI + physics + ab-initio intersection, tool/code queries,
-    and research methods. Returns max 10 queries.
+    Prioritises AI/ML + physics intersection, then tool/code queries,
+    and research methods. Returns max 12 queries.
     """
     queries = []
 
-    # 1. ML + physics cross-queries (pick up to 4)
-    for ml_term, phys_term in _ML_PHYSICS_PAIRS[:4]:
+    # 1. AI-focused queries first (higher weight — 6 slots)
+    queries.extend(_AI_PHYSICS_QUERIES[:6])
+
+    # 2. ML + physics cross-queries (pick up to 2)
+    for ml_term, phys_term in _ML_PHYSICS_PAIRS[:2]:
         queries.append(f"{ml_term} {phys_term}")
 
-    # 2. Tool/code specific queries from profile keywords
-    # Pull keywords that mention specific tools
+    # 3. Tool/code specific queries from profile keywords
     tool_keywords = set()
     if profile and isinstance(profile, dict):
         methods = []
@@ -65,7 +83,6 @@ def generate_queries(profile):
                     if any(t in kl for t in ("vasp", "wannier", "berkeleygw",
                                               "dft automation", "ab initio")):
                         tool_keywords.add(k)
-                    # EPW needs disambiguation — append context
                     elif kl == "epw":
                         tool_keywords.add("EPW electron-phonon coupling")
         for m in methods:
@@ -74,16 +91,15 @@ def generate_queries(profile):
                                       "dft automation", "ab initio", "machine learning")):
                 tool_keywords.add(m)
 
-    # Add up to 4 tool queries (from profile or fallback)
-    tool_qs = [f"{tk}" for tk in sorted(tool_keywords)][:4]
+    tool_qs = [f"{tk}" for tk in sorted(tool_keywords)][:3]
     if not tool_qs:
-        tool_qs = _TOOL_QUERIES[:4]
+        tool_qs = _TOOL_QUERIES[:3]
     queries.extend(tool_qs)
 
-    # 3. Add 2 research method queries
+    # 4. Add 2 research method queries
     queries.extend(_METHOD_QUERIES[:2])
 
-    # Deduplicate while preserving order, cap at 10
+    # Deduplicate while preserving order, cap at 12
     seen = set()
     unique = []
     for q in queries:
@@ -91,21 +107,27 @@ def generate_queries(profile):
         if ql not in seen:
             seen.add(ql)
             unique.append(q)
-    return unique[:10]
+    return unique[:12]
 
 
-def search_github_repos(query, limit=10, sort="stars"):
+def search_github_repos(query, limit=10, sort="stars", created_after=None):
     """Search GitHub repos using gh CLI.
 
     Returns list of dicts with standardised article fields plus GitHub-specific
     fields (stars, language, owner, repo_name).
     """
+    qualifiers = []
+    if created_after:
+        qualifiers.append(f"created:>={created_after}")
+    qualifier_str = " ".join(qualifiers)
+    full_query = f"{query} {qualifier_str}".strip() if qualifier_str else query
+
     cmd = [
-        "gh", "search", "repos", query,
+        "gh", "search", "repos", full_query,
         "--limit", str(limit),
         "--sort", sort,
         "--order", "desc",
-        "--json", "name,owner,description,url,stargazersCount,language,updatedAt",
+        "--json", "name,owner,description,url,stargazersCount,language,updatedAt,createdAt",
     ]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -134,6 +156,7 @@ def search_github_repos(query, limit=10, sort="stars"):
             "authors": owner_login,
             "summary": r.get("description") or "",
             "published": r.get("updatedAt", ""),
+            "created_at": r.get("createdAt", ""),
             "source_type": "github",
             "feed": "GitHub",
             "folder": "",
@@ -148,10 +171,18 @@ def search_github_repos(query, limit=10, sort="stars"):
 def fetch_github(profile, conn, config=None):
     """Fetch GitHub repos matching profile and insert into DB.
 
+    Runs two passes per query:
+    1. Recent repos (created in last 6 months, sorted by stars) — surfaces trending new projects
+    2. All-time top repos (sorted by stars) — catches established projects
+
     Returns count of newly inserted repos.
     """
     config = config or {}
     min_stars = config.get("github", {}).get("min_stars", 5)
+    recent_months = config.get("github", {}).get("recent_months", 6)
+
+    # Date threshold for "recent" repos
+    recent_cutoff = (datetime.now(timezone.utc) - timedelta(days=recent_months * 30)).strftime("%Y-%m-%d")
 
     queries = generate_queries(profile)
     now = datetime.now(timezone.utc).isoformat()
@@ -159,9 +190,14 @@ def fetch_github(profile, conn, config=None):
     new_count = 0
 
     for q in queries:
-        log.info("  GitHub search: %s", q)
-        repos = search_github_repos(q)
-        for repo in repos:
+        # Pass 1: recent trending repos (lower star threshold)
+        log.info("  GitHub search (recent): %s", q)
+        recent_repos = search_github_repos(q, limit=10, sort="stars", created_after=recent_cutoff)
+        # Pass 2: all-time top repos
+        log.info("  GitHub search (all-time): %s", q)
+        alltime_repos = search_github_repos(q, limit=5, sort="stars")
+
+        for repo in recent_repos + alltime_repos:
             if repo["stars"] < min_stars:
                 continue
             url = repo["link"]
