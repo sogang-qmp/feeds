@@ -7,68 +7,41 @@ from datetime import datetime, timedelta, timezone
 
 log = logging.getLogger("feeds")
 
-# AI agents for scientific research (highest weight — user's core interest)
-# Model: "vibe physics" — AI agents autonomously doing physics computation
-# NOTE: excludes MLP/force-field/materials-prediction — user not interested
-_AI_PHYSICS_QUERIES = [
-    "AI agent scientific simulation",
-    "LLM agent computational physics",
-    "agentic workflow scientific computing",
-    "autonomous research agent physics",
-    "Claude code scientific research",
-    "LLM long-running agent simulation",
-    "AI agent ab initio calculation",
-    "agentic AI research automation",
-    "LLM scientific computation pipeline",
-    "AI agent DFT workflow",
-]
 
-# Cross-domain queries: ML/AI + physics/materials (legacy pairs)
-_ML_PHYSICS_PAIRS = [
-    ("machine learning", "DFT"),
-    ("neural network", "phonon"),
-    ("deep learning", "materials science"),
-    ("graph neural network", "crystal"),
-    ("machine learning", "electron-phonon"),
-    ("AI", "ab initio"),
-    ("machine learning", "molecular dynamics"),
-]
-
-# Tool/code specific queries
-_TOOL_QUERIES = [
-    "VASP workflow automation",
-    "Wannier90",
-    "EPW electron-phonon",
-    "BerkeleyGW",
+# Fallback queries when profile has no current_interests or keywords
+_FALLBACK_QUERIES = [
     "DFT automation python",
     "ab initio phonon",
-]
-
-# Research method queries
-_METHOD_QUERIES = [
     "GW approximation code",
     "Bethe-Salpeter equation",
-    "polaron first-principles",
-    "moire superlattice simulation",
 ]
 
 
 def generate_queries(profile):
-    """Generate GitHub search queries from researcher profile.
+    """Generate GitHub search queries dynamically from profile.
 
-    Prioritises AI/ML + physics intersection, then tool/code queries,
-    and research methods. Returns max 12 queries.
+    Priority order:
+    1. current_interests topics + examples (6 slots)
+    2. Profile methods/tools from keywords (3 slots)
+    3. Cross-topic from strong keywords (3 slots)
+    Returns max 12 queries.
     """
     queries = []
 
-    # 1. AI-focused queries first (higher weight — 6 slots)
-    queries.extend(_AI_PHYSICS_QUERIES[:6])
+    # 1. Current interests — topics and examples
+    interests = profile.get("current_interests", []) if profile else []
+    high = [ci for ci in interests if ci.get("weight") == "high"]
+    medium = [ci for ci in interests if ci.get("weight") != "high"]
+    for ci in high + medium:
+        topic = ci.get("topic", "")
+        if topic:
+            queries.append(topic)
+        for ex in ci.get("examples", [])[:2]:
+            queries.append(ex)
+        if len(queries) >= 6:
+            break
 
-    # 2. ML + physics cross-queries (pick up to 2)
-    for ml_term, phys_term in _ML_PHYSICS_PAIRS[:2]:
-        queries.append(f"{ml_term} {phys_term}")
-
-    # 3. Tool/code specific queries from profile keywords
+    # 2. Tool/code queries from profile keywords
     tool_keywords = set()
     if profile and isinstance(profile, dict):
         methods = []
@@ -88,16 +61,28 @@ def generate_queries(profile):
         for m in methods:
             ml = m.lower()
             if any(t in ml for t in ("vasp", "wannier", "berkeleygw",
-                                      "dft automation", "ab initio", "machine learning")):
+                                      "dft automation", "ab initio")):
                 tool_keywords.add(m)
 
-    tool_qs = [f"{tk}" for tk in sorted(tool_keywords)][:3]
-    if not tool_qs:
-        tool_qs = _TOOL_QUERIES[:3]
+    tool_qs = sorted(tool_keywords)[:3]
+    if not tool_qs and not queries:
+        tool_qs = _FALLBACK_QUERIES[:3]
     queries.extend(tool_qs)
 
-    # 4. Add 2 research method queries
-    queries.extend(_METHOD_QUERIES[:2])
+    # 3. Cross-topic pairs from strong keywords
+    strong = []
+    if profile and isinstance(profile, dict):
+        kw = profile.get("keywords", {})
+        if isinstance(kw, dict):
+            strong = kw.get("strong", [])
+    for i in range(0, len(strong) - 1, 3):
+        if len(queries) >= 12:
+            break
+        queries.append(f"{strong[i]} {strong[i+1]}")
+
+    # Fallback if we have very few queries
+    if len(queries) < 4:
+        queries.extend(_FALLBACK_QUERIES)
 
     # Deduplicate while preserving order, cap at 12
     seen = set()
@@ -108,6 +93,37 @@ def generate_queries(profile):
             seen.add(ql)
             unique.append(q)
     return unique[:12]
+
+
+def compute_velocity(stars, created_at):
+    """Compute stars/day velocity and trending category.
+
+    Returns (velocity_float, category_string).
+    Categories:
+      hot: > 2 stars/day
+      rising: > 0.5 stars/day
+      established: everything else
+    """
+    if not created_at or not stars:
+        return 0.0, "established"
+
+    try:
+        created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        age_days = (datetime.now(timezone.utc) - created).days
+        if age_days < 1:
+            age_days = 1
+        velocity = stars / age_days
+    except (ValueError, TypeError):
+        return 0.0, "established"
+
+    if velocity > 2:
+        category = "hot"
+    elif velocity > 0.5:
+        category = "rising"
+    else:
+        category = "established"
+
+    return round(velocity, 2), category
 
 
 def search_github_repos(query, limit=10, sort="stars", created_after=None):
@@ -172,16 +188,16 @@ def fetch_github(profile, conn, config=None):
     """Fetch GitHub repos matching profile and insert into DB.
 
     Runs two passes per query:
-    1. Recent repos (created in last 6 months, sorted by stars) — surfaces trending new projects
-    2. All-time top repos (sorted by stars) — catches established projects
+    1. Recent repos (created in last 6 months, sorted by stars)
+    2. All-time top repos (sorted by stars)
 
+    Computes velocity (stars/age) for trending detection.
     Returns count of newly inserted repos.
     """
     config = config or {}
     min_stars = config.get("github", {}).get("min_stars", 5)
     recent_months = config.get("github", {}).get("recent_months", 6)
 
-    # Date threshold for "recent" repos
     recent_cutoff = (datetime.now(timezone.utc) - timedelta(days=recent_months * 30)).strftime("%Y-%m-%d")
 
     queries = generate_queries(profile)
@@ -190,10 +206,8 @@ def fetch_github(profile, conn, config=None):
     new_count = 0
 
     for q in queries:
-        # Pass 1: recent trending repos (lower star threshold)
         log.info("  GitHub search (recent): %s", q)
         recent_repos = search_github_repos(q, limit=10, sort="stars", created_after=recent_cutoff)
-        # Pass 2: all-time top repos
         log.info("  GitHub search (all-time): %s", q)
         alltime_repos = search_github_repos(q, limit=5, sort="stars")
 
@@ -205,16 +219,21 @@ def fetch_github(profile, conn, config=None):
                 continue
             seen_urls.add(url)
 
+            velocity, trending_cat = compute_velocity(
+                repo["stars"], repo.get("created_at", ""))
+
             try:
                 cur = conn.execute(
                     """INSERT OR IGNORE INTO articles
                        (link, feed, folder, title, authors, summary, published,
-                        fetched_at, source_type, stars, language, owner, repo_name)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        fetched_at, source_type, stars, language, owner, repo_name,
+                        velocity, trending_category)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (url, repo["feed"], repo["folder"], repo["title"],
                      repo["authors"], repo["summary"], repo["published"],
                      now, "github",
-                     repo["stars"], repo["language"], repo["owner"], repo["repo_name"]),
+                     repo["stars"], repo["language"], repo["owner"], repo["repo_name"],
+                     velocity, trending_cat),
                 )
                 if cur.rowcount > 0:
                     new_count += 1

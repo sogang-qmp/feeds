@@ -3,12 +3,13 @@
 import json
 import os
 import tempfile
+from datetime import datetime, timezone, timedelta
 from unittest import mock
 
 import pytest
 
 from db import init_db
-from sources.github import fetch_github, generate_queries, search_github_repos
+from sources.github import fetch_github, generate_queries, search_github_repos, compute_velocity
 
 # ---------------------------------------------------------------------------
 # Sample profile (minimal subset of research_profile.yaml)
@@ -31,6 +32,11 @@ SAMPLE_PROFILE = {
         "strong": ["electron-phonon", "DFT", "Wannier", "EPW", "BerkeleyGW"],
         "moderate": ["VASP", "ab initio automation", "DFT automation"],
     },
+    "current_interests": [
+        {"topic": "AI agents for physics", "weight": "high",
+         "examples": ["vibe physics", "autonomous simulation"]},
+        {"topic": "moiré phonons", "weight": "medium"},
+    ],
 }
 
 # ---------------------------------------------------------------------------
@@ -45,6 +51,7 @@ MOCK_GH_OUTPUT = json.dumps([
         "stargazersCount": 120,
         "language": "Python",
         "updatedAt": "2026-01-15T10:00:00Z",
+        "createdAt": "2025-06-01T00:00:00Z",
     },
     {
         "name": "tiny-repo",
@@ -54,6 +61,7 @@ MOCK_GH_OUTPUT = json.dumps([
         "stargazersCount": 2,  # below threshold
         "language": "Python",
         "updatedAt": "2025-12-01T00:00:00Z",
+        "createdAt": "2025-11-01T00:00:00Z",
     },
     {
         "name": "phonon-ml",
@@ -63,6 +71,7 @@ MOCK_GH_OUTPUT = json.dumps([
         "stargazersCount": 45,
         "language": "Julia",
         "updatedAt": "2026-03-01T08:00:00Z",
+        "createdAt": "2026-01-15T00:00:00Z",
     },
 ])
 
@@ -81,16 +90,28 @@ class TestGenerateQueries:
         qs = generate_queries(SAMPLE_PROFILE)
         assert len(qs) >= 3
 
-    def test_max_ten(self):
+    def test_max_twelve(self):
         qs = generate_queries(SAMPLE_PROFILE)
-        assert len(qs) <= 10
+        assert len(qs) <= 12
 
-    def test_contains_ai_physics_terms(self):
+    def test_uses_current_interests(self):
         qs = generate_queries(SAMPLE_PROFILE)
         combined = " ".join(qs).lower()
-        # Should contain at least one AI-ish term and one physics-ish term
-        assert any(t in combined for t in ("machine learning", "neural network", "deep learning", "ai"))
-        assert any(t in combined for t in ("dft", "phonon", "materials", "electron-phonon", "ab initio"))
+        assert "ai agents" in combined or "vibe physics" in combined
+
+    def test_no_mlp_queries(self):
+        """User doesn't want MLP/materials-prediction queries."""
+        profile = {**SAMPLE_PROFILE, "current_interests": []}
+        qs = generate_queries(profile)
+        combined = " ".join(qs).lower()
+        assert "interatomic potential" not in combined
+        assert "force field" not in combined
+        assert "materials prediction" not in combined
+
+    def test_contains_profile_tools(self):
+        qs = generate_queries(SAMPLE_PROFILE)
+        combined = " ".join(qs).lower()
+        assert any(t in combined for t in ("vasp", "wannier", "berkeleygw", "epw", "dft"))
 
     def test_handles_empty_profile(self):
         qs = generate_queries({})
@@ -101,6 +122,31 @@ class TestGenerateQueries:
         qs = generate_queries(None)
         assert isinstance(qs, list)
         assert len(qs) >= 3
+
+
+# ===========================================================================
+# Tests for compute_velocity
+# ===========================================================================
+
+class TestComputeVelocity:
+    def test_basic_velocity(self):
+        vel, cat = compute_velocity(100, "2026-01-01T00:00:00Z")
+        assert vel > 0
+        assert cat in ("hot", "rising", "established")
+
+    def test_hot_repo(self):
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        vel, cat = compute_velocity(10, yesterday)
+        assert cat == "hot"
+
+    def test_established_repo(self):
+        vel, cat = compute_velocity(50, "2020-01-01T00:00:00Z")
+        assert cat == "established"
+
+    def test_missing_created_at(self):
+        vel, cat = compute_velocity(100, "")
+        assert cat == "established"
+        assert vel == 0.0
 
 
 # ===========================================================================
@@ -126,6 +172,7 @@ class TestSearchGithubRepos:
         assert first["language"] == "Python"
         assert first["owner"] == "researcher"
         assert first["repo_name"] == "awesome-dft"
+        assert first["created_at"] == "2025-06-01T00:00:00Z"
 
     @mock.patch("sources.github.subprocess.run")
     def test_handles_gh_error(self, mock_run):
@@ -168,12 +215,10 @@ class TestFetchGithub:
 
             count = fetch_github(SAMPLE_PROFILE, conn)
 
-            # Should have inserted the 2 repos with >=5 stars
             rows = conn.execute("SELECT * FROM articles WHERE source_type='github'").fetchall()
             assert len(rows) == 2
             assert count == 2
 
-            # Check fields on first row
             row = conn.execute(
                 "SELECT * FROM articles WHERE link=?",
                 ("https://github.com/researcher/awesome-dft",),
@@ -182,12 +227,13 @@ class TestFetchGithub:
             assert row["stars"] == 120
             assert row["owner"] == "researcher"
             assert row["repo_name"] == "awesome-dft"
+            assert row["velocity"] is not None
+            assert row["trending_category"] in ("hot", "rising", "established")
 
             conn.close()
 
     @mock.patch("sources.github.subprocess.run")
     def test_dedup_within_run(self, mock_run):
-        """Same URL returned by multiple queries should be inserted only once."""
         mock_run.return_value = mock.Mock(
             returncode=0, stdout=MOCK_GH_OUTPUT, stderr=""
         )
@@ -199,15 +245,12 @@ class TestFetchGithub:
             count = fetch_github(SAMPLE_PROFILE, conn)
 
             rows = conn.execute("SELECT * FROM articles WHERE source_type='github'").fetchall()
-            # Even though generate_queries returns multiple queries, dedup ensures
-            # each URL appears only once
             assert len(rows) == 2
             assert count == 2
             conn.close()
 
     @mock.patch("sources.github.subprocess.run")
     def test_respects_min_stars_config(self, mock_run):
-        """Config github.min_stars should filter repos."""
         single_repo = json.dumps([{
             "name": "mid-repo",
             "owner": {"login": "user"},
@@ -216,6 +259,7 @@ class TestFetchGithub:
             "stargazersCount": 15,
             "language": "Python",
             "updatedAt": "2026-01-01T00:00:00Z",
+            "createdAt": "2025-06-01T00:00:00Z",
         }])
         mock_run.return_value = mock.Mock(
             returncode=0, stdout=single_repo, stderr=""
@@ -225,7 +269,6 @@ class TestFetchGithub:
             db_path = os.path.join(tmp, "test.db")
             conn = init_db(db_path)
 
-            # min_stars=20 should exclude the repo with 15 stars
             count = fetch_github(SAMPLE_PROFILE, conn, config={"github": {"min_stars": 20}})
             rows = conn.execute("SELECT * FROM articles WHERE source_type='github'").fetchall()
             assert len(rows) == 0

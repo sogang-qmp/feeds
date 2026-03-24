@@ -106,7 +106,7 @@ def _render_literature_section(recommendations):
 
 
 def _render_github_section(articles):
-    """Render GitHub repos grouped by score descending."""
+    """Render GitHub repos grouped by score descending, velocity within groups."""
     by_score = {}
     for a in articles:
         s = a.get("score", 1)
@@ -114,7 +114,7 @@ def _render_github_section(articles):
 
     html = ""
     for score in sorted(by_score.keys(), reverse=True):
-        items = by_score[score]
+        items = sorted(by_score[score], key=lambda a: a.get("velocity", 0), reverse=True)
         html += f'<h3 class="score-group">Score {score} <span class="count">({len(items)})</span></h3>\n'
         for a in items:
             title = a.get("title", "")
@@ -122,7 +122,15 @@ def _render_github_section(articles):
             description = a.get("summary", "") or a.get("description", "") or ""
             stars = a.get("stars", "")
             language = a.get("language", "") or ""
+            trending = a.get("trending_category", "")
             title_html = f'<a href="{link}" target="_blank" rel="noopener" class="gh-repo">{title}</a>' if link else f'<span class="gh-repo">{title}</span>'
+
+            trend_badge = ""
+            if trending == "hot":
+                trend_badge = '<span class="trend-badge" title="Trending fast">&#128293;</span>'
+            elif trending == "rising":
+                trend_badge = '<span class="trend-badge" title="Rising">&#128200;</span>'
+
             meta_parts = []
             if description:
                 meta_parts.append(description)
@@ -134,7 +142,7 @@ def _render_github_section(articles):
 
             html += f'<div class="gh-item">'
             html += f'<span class="score-badge s{score}">{score}</span>'
-            html += f'<div class="gh-detail"><div class="gh-title">{title_html}</div>'
+            html += f'<div class="gh-detail"><div class="gh-title">{trend_badge}{title_html}</div>'
             if meta_html:
                 html += f'<div class="gh-meta">{meta_html}</div>'
             html += f'</div></div>\n'
@@ -232,6 +240,7 @@ def generate_html(scored_articles, today, ga_id="", recommendations=None):
 .lit-title, .gh-title { font-size: 0.92em; line-height: 1.4; }
 .lit-meta, .gh-meta { font-size: 0.8em; color: var(--muted); margin-top: 2px; }
 .gh-repo { font-family: 'JetBrains Mono', monospace; font-size: 0.95em; }
+.trend-badge { margin-right: 4px; }
 """
 
     subtitle_html = f'<p class="subtitle">{subtitle}</p>' if subtitle else ""

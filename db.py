@@ -38,6 +38,8 @@ def init_db(db_path):
         ("language", "TEXT"),
         ("owner", "TEXT"),
         ("repo_name", "TEXT"),
+        ("velocity", "REAL"),
+        ("trending_category", "TEXT"),
     ]
     for col_name, col_type in new_columns:
         if col_name not in existing:

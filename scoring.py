@@ -62,11 +62,18 @@ def _score_batch(batch, profile_text):
     """Score a single batch of articles via Claude Code subprocess."""
     articles_text = ""
     for i, a in enumerate(batch):
+        trending_note = ""
+        if a.get("source_type") == "github":
+            tc = a.get("trending_category", "")
+            vel = a.get("velocity", 0)
+            if tc in ("hot", "rising"):
+                trending_note = f" [TRENDING: {tc}, {vel} stars/day]"
+
         articles_text += (
             f"\n[{i}] Feed: {a['feed']}\n"
             f"    Title: {a['title']}\n"
             f"    Authors: {a['authors'] or 'N/A'}\n"
-            f"    Summary: {a['summary']}\n"
+            f"    Summary: {a['summary']}{trending_note}\n"
         )
 
     prompt = f"""You are a research assistant. Score EVERY article by relevance to this researcher's interests.
@@ -79,11 +86,14 @@ def _score_batch(batch, profile_text):
 
 ## Instructions
 Score each article from 1 to 5:
-  5 = directly related to researcher's core topics
-  4 = closely related
+  5 = directly related to researcher's core topics OR matches current interests
+  4 = closely related or trending in a related area
   3 = somewhat related
   2 = tangentially related
   1 = not related
+
+IMPORTANT: Articles matching "Current interests" topics should score at least 4.
+Trending repos in relevant areas should get a +1 bonus.
 
 Return a JSON array with ALL {len(batch)} articles. Each element:
 - "index": article index number
