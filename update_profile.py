@@ -11,12 +11,15 @@ Usage:
 
 import argparse
 import difflib
+import json
 import logging
+import os
+import subprocess
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
-import anthropic
 import yaml
 
 log = logging.getLogger("update_profile")
@@ -24,14 +27,7 @@ log = logging.getLogger("update_profile")
 BASE_DIR = Path(__file__).resolve().parent
 MEMORY_DIR = Path.home() / "drive" / "0_Cortex" / "memory"
 PROFILE_PATH = BASE_DIR / "research_profile.yaml"
-CONFIG_PATH = BASE_DIR / "config.yaml"
-
-MODEL = "claude-haiku-4-5-20251001"
-
-
-def load_config():
-    with open(CONFIG_PATH) as f:
-        return yaml.safe_load(f)
+CLAUDE_BIN = os.path.expanduser("~/.local/bin/claude")
 
 
 def load_memory_files():
@@ -69,14 +65,45 @@ Rules:
 - Output ONLY the YAML content, no markdown fences or explanation"""
 
 
-def call_llm(prompt: str, api_key: str) -> str:
-    client = anthropic.Anthropic(api_key=api_key)
-    resp = client.messages.create(
-        model=MODEL,
-        max_tokens=4096,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return resp.content[0].text.strip()
+def call_llm(prompt: str) -> str:
+    """Run Claude Code in pipe mode and return result text."""
+    tmp_dir = BASE_DIR / "tmp"
+    tmp_dir.mkdir(exist_ok=True)
+
+    cmd = [
+        CLAUDE_BIN, "-p", "-",
+        "--output-format", "json",
+        "--dangerously-skip-permissions",
+        "--model", "haiku",
+    ]
+
+    fd, tmp_path = tempfile.mkstemp(suffix=".json", dir=str(tmp_dir))
+    os.close(fd)
+
+    try:
+        with open(tmp_path, "w") as stdout_f:
+            proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=stdout_f,
+                stderr=subprocess.PIPE,
+                cwd=str(BASE_DIR),
+            )
+            _, stderr = proc.communicate(input=prompt.encode(), timeout=300)
+
+        with open(tmp_path) as f:
+            raw = f.read().strip()
+
+        if not raw:
+            raise RuntimeError(f"Empty Claude output. stderr: {stderr.decode()[:500]}")
+
+        claude_out = json.loads(raw)
+        if claude_out.get("is_error"):
+            raise RuntimeError(claude_out.get("result", "unknown error"))
+        return claude_out["result"]
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 def main():
@@ -91,8 +118,6 @@ def main():
     )
 
     # Load inputs
-    config = load_config()
-    api_key = config["anthropic"]["api_key"]
     current_yaml = PROFILE_PATH.read_text()
     memories = load_memory_files()
 
@@ -104,8 +129,8 @@ def main():
 
     # Call LLM
     prompt = build_prompt(current_yaml, memories)
-    log.info("Calling %s to update profile...", MODEL)
-    new_yaml = call_llm(prompt, api_key)
+    log.info("Calling Claude Code (haiku) to update profile...")
+    new_yaml = call_llm(prompt)
 
     # Strip markdown fences if LLM included them
     if new_yaml.startswith("```"):

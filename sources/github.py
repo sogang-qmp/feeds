@@ -7,20 +7,20 @@ from datetime import datetime, timedelta, timezone
 
 log = logging.getLogger("feeds")
 
-# AI/ML + physics/materials cross-domain queries (higher weight — listed first)
+# AI agents for scientific research (highest weight — user's core interest)
+# Model: "vibe physics" — AI agents autonomously doing physics computation
+# NOTE: excludes MLP/force-field/materials-prediction — user not interested
 _AI_PHYSICS_QUERIES = [
-    "machine learning interatomic potential",
-    "graph neural network materials",
-    "deep learning DFT",
-    "AI molecular dynamics",
-    "neural network force field",
-    "machine learning electron-phonon",
-    "foundation model materials science",
-    "LLM chemistry",
     "AI agent scientific simulation",
-    "agentic workflow physics",
-    "LLM agent materials discovery",
-    "autonomous lab simulation",
+    "LLM agent computational physics",
+    "agentic workflow scientific computing",
+    "autonomous research agent physics",
+    "Claude code scientific research",
+    "LLM long-running agent simulation",
+    "AI agent ab initio calculation",
+    "agentic AI research automation",
+    "LLM scientific computation pipeline",
+    "AI agent DFT workflow",
 ]
 
 # Cross-domain queries: ML/AI + physics/materials (legacy pairs)
