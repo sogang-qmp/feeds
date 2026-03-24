@@ -1,0 +1,199 @@
+# Research Profile for Job/Conference/Opportunity Recommendation
+# Last updated: 2026-03-23
+# Update method: see comments at bottom
+
+# ============================================================
+# Core Identity
+# ============================================================
+researcher:
+  name: Young Woo Choi
+  position: Assistant Professor
+  affiliation: Sogang University, Department of Physics
+  career_stage: early-career faculty  # useful for filtering junior vs senior positions
+
+# ============================================================
+# Research Areas (hierarchical: broad → specific)
+# ============================================================
+research_areas:
+  primary:
+    - first-principles computational methods
+    - electron-phonon coupling and polaron physics
+    - superconductivity
+    - 2D materials and heterostructures (TMDs, graphene, van der Waals)
+    - many-body perturbation theory (GW, BSE)
+    - low-dimensional materials and nanostructures
+    - charge density waves (CDW)
+    - surface physics and image potential states
+
+  secondary:
+    - structural relaxation in moiré systems
+    - Wannier function methods
+    - spectral functions and excitonic properties
+    - rare-earth intermetallics and hydrides
+    - AI-assisted computational automation
+    - topological properties
+    - strongly correlated materials
+    - polaron calculations and multivalley effects
+    - quasiparticle band structures
+
+  methods:
+    - density functional theory (DFT, VASP, Quantum ESPRESSO, SIESTA)
+    - electron-phonon coupling calculations (EPW)
+    - GW approximation and BerkeleyGW
+    - Bethe-Salpeter equation (BSE)
+    - Wannier function interpolation
+    - ab initio molecular dynamics
+    - nudged elastic band (NEB) calculations
+    - machine learning for materials science and DFT automation
+    - polaron calculations via EPW
+    - spectral function and optical response
+    - HSE06 hybrid functional calculations
+    - image potential state calculations
+    - 1D coupled-channel solvers for surface states
+
+  materials_systems:
+    - 2D transition metal dichalcogenides (TMDs: MoS2, WS2, MoTe2, TiSe2, HfS2, ReS2)
+    - graphene and moiré superlattices (twisted bilayer graphene, flat bands, twisted MoS2, moiré phonons)
+    - van der Waals heterostructures and interfaces (VSe3-Hf2Se9, ReS2-WS2, Bi2O2Se)
+    - 1D materials (carbon nanotubes, phosphorus nanostructures, XCN chains)
+    - rare-earth compounds (strontium ruthenate Sr2RuO4, GdNiBi2, Gd2C hydrides)
+    - surfaces and image potential states
+    - perovskites (MAPbBr3)
+    - charge density wave materials (1T-TiSe2)
+    - transition metal pnictides (NiPS3)
+
+# ============================================================
+# Keywords (for fuzzy matching against job postings)
+# ============================================================
+keywords:
+  # These are used for generous matching — any overlap triggers recommendation
+  strong:  # high relevance
+    - electron-phonon
+    - polaron
+    - multivalley polaron
+    - superconductor
+    - first-principles
+    - ab initio
+    - DFT
+    - computational materials
+    - condensed matter theory
+    - low-dimensional
+    - nanostructure
+    - moiré
+    - moire phonon
+    - flat band
+    - graphene
+    - 2D materials
+    - TMD
+    - phonon
+    - phonon dispersion
+    - BerkeleyGW
+    - GW approximation
+    - BSE
+    - Bethe-Salpeter
+    - Wannier
+    - EPW
+    - spectral function
+    - heterostructure
+    - van der Waals
+    - charge density wave
+    - CDW
+    - exciton
+    - image potential
+    - surface states
+    - HSE06
+    - hybrid functional
+
+  moderate:  # related enough to flag
+    - computational physics
+    - materials science
+    - electronic structure
+    - band structure
+    - density of states
+    - quasiparticle
+    - optical response
+    - many-body
+    - VASP
+    - Quantum ESPRESSO
+    - SIESTA
+    - machine learning materials
+    - structural relaxation
+    - NEB
+    - transition metal
+    - rare-earth
+    - intermetallic
+    - topological
+    - strongly correlated
+    - strongly correlated electrons
+    - ab initio automation
+    - DFT automation
+    - piezoelectricity
+    - perovskite
+    - heterointerface
+
+  weak:  # broad but still worth seeing
+    - quantum materials
+    - nanoscience
+    - theoretical physics
+    - solid state physics
+    - high-performance computing
+    - scientific computing
+    - physics faculty
+    - condensed matter
+    - AI materials
+    - materials discovery
+    - Raman spectroscopy
+    - ARPES
+
+# ============================================================
+# Current Interests (dynamic — update frequently)
+# These get extra weight in scoring and drive query generation.
+# ============================================================
+current_interests:
+  - topic: "AI agents for scientific research (vibe physics)"
+    weight: high
+    examples:
+      - "LLM autonomously conducting physics calculations"
+      - "long-running Claude for scientific computing"
+      - "agentic workflow for ab initio simulation"
+  - topic: "agentic AI and autonomous research workflows"
+    weight: high
+    examples:
+      - "Ralph loop, CLAUDE.md-driven research"
+      - "AI grad student model"
+      - "autonomous scientific discovery"
+  - topic: "electron-phonon coupling in 2D materials"
+    weight: medium
+  - topic: "moiré physics and flat bands"
+    weight: medium
+
+# ============================================================
+# Position Types of Interest
+# ============================================================
+opportunity_filters:
+  position_types:
+    - postdoc          # for recruiting to lab
+    - PhD student      # for recruiting
+    - faculty          # peer networking, collaboration
+    - research scientist
+    - workshop
+    - conference
+    - summer school
+
+  geography:
+    preferred:
+      - South Korea
+      - worldwide (remote/hybrid)
+    open_to:
+      - any  # generous — don't filter by location
+
+  exclude_keywords:
+    - experimental only
+    - clinical
+    - biology
+    - chemistry wet lab
+
+# ============================================================
+# Update Strategy
+# ============================================================
+# See notes below on how to keep this profile current.
