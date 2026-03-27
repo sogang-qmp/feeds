@@ -116,7 +116,7 @@ def sample_profile():
         },
         "current_interests": [
             {"topic": "AI agents for physics", "weight": "high",
-             "examples": ["vibe physics", "autonomous simulation"]},
+             "examples": ["LLM computational physics", "autonomous DFT workflow"]},
             {"topic": "moiré phonons", "weight": "medium"},
         ],
     }

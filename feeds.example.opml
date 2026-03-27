@@ -9,6 +9,8 @@
             <outline type="rss" text="Nature" title="Nature" xmlUrl="http://www.nature.com/nature/current_issue/rss" htmlUrl="http://feeds.nature.com/nature/rss/current"/>
             <outline type="rss" text="Science Magazine" title="Science Magazine" xmlUrl="http://www.sciencemag.org/rss/current.xml" htmlUrl="https://www.science.org/journal/science"/>
             <outline type="rss" text="PRL" title="PRL" xmlUrl="http://feeds.aps.org/rss/recent/prl.xml" htmlUrl="http://journals.aps.org/prl/"/>
+            <outline type="rss" text="SciPost Physics" title="SciPost Physics" xmlUrl="https://scipost.org/rss/publications/phys-ct" htmlUrl="https://scipost.org/SciPostPhys"/>
+            <outline type="rss" text="arXiv cond-mat.mes-hall" title="arXiv cond-mat.mes-hall" xmlUrl="http://export.arxiv.org/rss/cond-mat.mes-hall" htmlUrl="https://arxiv.org/list/cond-mat.mes-hall/recent"/>
         </outline>
         <outline text="Blogs" title="Blogs">
             <outline type="rss" text="OpenAI Blog" title="OpenAI Blog" xmlUrl="https://openai.com/news/rss.xml" htmlUrl="https://openai.com/news"/>

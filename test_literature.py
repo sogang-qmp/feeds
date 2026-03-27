@@ -149,11 +149,11 @@ class TestGenerateQueries:
     def test_includes_current_interests_queries(self, sample_profile):
         sample_profile["current_interests"] = [
             {"topic": "AI agents for physics", "weight": "high",
-             "examples": ["vibe physics", "autonomous simulation"]},
+             "examples": ["LLM computational physics", "autonomous DFT workflow"]},
         ]
         queries = generate_queries(sample_profile)
         combined = " ".join(queries).lower()
-        assert "ai agents" in combined or "vibe physics" in combined or "autonomous" in combined
+        assert "ai agents" in combined or "llm computational physics" in combined or "autonomous" in combined
 
     def test_empty_profile(self):
         queries = generate_queries({})

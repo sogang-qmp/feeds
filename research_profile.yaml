@@ -150,12 +150,16 @@ keywords:
 # These get extra weight in scoring and drive query generation.
 # ============================================================
 current_interests:
-  - topic: "AI agents for scientific research (vibe physics)"
+  - topic: "AI agents for scientific research"
     weight: high
     examples:
-      - "LLM autonomously conducting physics calculations"
-      - "long-running Claude for scientific computing"
-      - "agentic workflow for ab initio simulation"
+      - "LLM computational physics"
+      - "autonomous DFT workflow"
+      - "AI-driven first-principles"
+      - "language model ab initio"
+      - "LLM scientific discovery"
+      - "AI scientist physics"
+      - "autonomous experiment DFT"
   - topic: "agentic AI and autonomous research workflows"
     weight: high
     examples:

@@ -29,7 +29,7 @@ def sample_profile():
         },
         "current_interests": [
             {"topic": "AI agents for physics", "weight": "high",
-             "examples": ["vibe physics"]},
+             "examples": ["LLM computational physics"]},
         ],
     }
 

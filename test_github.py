@@ -34,7 +34,7 @@ SAMPLE_PROFILE = {
     },
     "current_interests": [
         {"topic": "AI agents for physics", "weight": "high",
-         "examples": ["vibe physics", "autonomous simulation"]},
+         "examples": ["LLM computational physics", "autonomous DFT workflow"]},
         {"topic": "moiré phonons", "weight": "medium"},
     ],
 }
@@ -97,7 +97,7 @@ class TestGenerateQueries:
     def test_uses_current_interests(self):
         qs = generate_queries(SAMPLE_PROFILE)
         combined = " ".join(qs).lower()
-        assert "ai agents" in combined or "vibe physics" in combined
+        assert "ai agents" in combined or "llm computational physics" in combined
 
     def test_no_mlp_queries(self):
         """User doesn't want MLP/materials-prediction queries."""
