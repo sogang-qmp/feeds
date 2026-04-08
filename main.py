@@ -85,6 +85,8 @@ def cmd_fetch(args, base_dir, config):
             feeds = parse_opml(opml_path)
             log.info(f"[fetch] Fetching {len(feeds)} RSS feeds...")
             fetch_articles(feeds, conn)
+            from sources.anthropic import fetch_anthropic
+            fetch_anthropic(conn)
 
         if do_github:
             from sources.github import fetch_github
