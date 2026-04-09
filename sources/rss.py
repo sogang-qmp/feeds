@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
 import feedparser
+import requests
 
 log = logging.getLogger("feeds")
 
@@ -43,7 +44,8 @@ def fetch_articles(feeds, conn):
     for feed_info in feeds:
         log.info(f"  Fetching: {feed_info['title']}...")
         try:
-            parsed = feedparser.parse(feed_info["url"])
+            resp = requests.get(feed_info["url"], timeout=60)
+            parsed = feedparser.parse(resp.content)
         except Exception as e:
             log.warning(f"    Error fetching {feed_info['title']}: {e}")
             continue
@@ -74,7 +76,7 @@ def fetch_articles(feeds, conn):
                 authors = entry.author or ""
 
             try:
-                conn.execute(
+                cur = conn.execute(
                     """INSERT OR IGNORE INTO articles
                        (link, feed, folder, title, authors, summary, published, fetched_at, source_type)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -82,7 +84,7 @@ def fetch_articles(feeds, conn):
                      getattr(entry, "title", "No title"), authors, summary,
                      published.isoformat(), now, "rss"),
                 )
-                if conn.total_changes:
+                if cur.rowcount > 0:
                     new_count += 1
             except sqlite3.IntegrityError:
                 pass

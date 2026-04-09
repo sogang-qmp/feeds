@@ -7,6 +7,7 @@ Usage:
 """
 
 import argparse
+import json
 import logging
 import logging.handlers
 import sys
@@ -139,27 +140,41 @@ def cmd_curate(args, base_dir, config):
             feeds = parse_opml(opml_path) if opml_path.exists() else []
         scored = rss_scored + gh_scored
 
-        # Literature tab: LLM-curated recommendations (~10 papers)
+        # Literature tab: LLM-curated recommendations (~10 papers), cached per day
         recommendations = None
-        log.info("[curate] Generating literature recommendations...")
-        try:
-            recommendations = recommend_articles(profile, base_dir, config)
-            log.info(f"[curate] Got {len(recommendations)} literature recommendations.")
-        except Exception as e:
-            log.warning(f"[curate] Literature recommendations failed (proceeding without): {e}")
+        rec_cache_path = base_dir / "state" / f"recommendations_{today}.json"
+        if rec_cache_path.exists():
+            try:
+                with open(rec_cache_path) as f:
+                    recommendations = json.load(f)
+                log.info(f"[curate] Loaded {len(recommendations)} cached recommendations for {today}.")
+            except Exception:
+                recommendations = None
+
+        if recommendations is None:
+            log.info("[curate] Generating literature recommendations...")
+            try:
+                recommendations = recommend_articles(profile, base_dir, config)
+                log.info(f"[curate] Got {len(recommendations)} literature recommendations.")
+                # Cache for today
+                (base_dir / "state").mkdir(exist_ok=True)
+                with open(rec_cache_path, "w") as f:
+                    json.dump(recommendations, f, indent=2)
+            except Exception as e:
+                log.warning(f"[curate] Literature recommendations failed (proceeding without): {e}")
 
         # Generate HTML
         log.info("[curate] Generating HTML...")
         ga_id = config.get("analytics", {}).get("ga_id", "")
         html = generate_html(scored, today, ga_id, recommendations)
-        deploy_html(html, today, base_dir, ga_id)
+        deploy_html(html, today, base_dir, ga_id, feeds=feeds)
 
-        # Mark as curated
-        ids = [a["id"] for a in articles]
-        conn.execute(
-            f"UPDATE articles SET curated=1 WHERE id IN ({','.join('?' * len(ids))})",
-            ids,
-        )
+        # Mark as curated and persist scores
+        for a in scored:
+            conn.execute(
+                "UPDATE articles SET curated=1, score=? WHERE id=?",
+                (a.get("score"), a["id"]),
+            )
         conn.commit()
     finally:
         conn.close()

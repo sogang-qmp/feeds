@@ -641,7 +641,12 @@ class TestCmdCurate:
 
         args = SimpleNamespace(dry_run=True, profile="research_profile.yaml")
 
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"results": []}
+        mock_resp.raise_for_status.return_value = None
+
         with patch("scoring.run_claude", return_value=scores_json), \
+             patch("sources.literature.requests.get", return_value=mock_resp), \
              patch("recommend.run_claude", return_value='[]'):
             main.cmd_curate(args, tmp_dir, sample_config)
 

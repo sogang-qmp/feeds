@@ -11,23 +11,20 @@ Usage:
 
 import argparse
 import difflib
-import json
 import logging
-import os
-import subprocess
 import sys
-import tempfile
 from datetime import datetime
 from pathlib import Path
 
 import yaml
+
+from llm import run_claude
 
 log = logging.getLogger("update_profile")
 
 BASE_DIR = Path(__file__).resolve().parent
 MEMORY_DIR = Path.home() / "drive" / "0_Cortex" / "memory"
 PROFILE_PATH = BASE_DIR / "research_profile.yaml"
-CLAUDE_BIN = os.path.expanduser("~/.local/bin/claude")
 
 
 def load_memory_files():
@@ -65,47 +62,6 @@ Rules:
 - Output ONLY the YAML content, no markdown fences or explanation"""
 
 
-def call_llm(prompt: str) -> str:
-    """Run Claude Code in pipe mode and return result text."""
-    tmp_dir = BASE_DIR / "tmp"
-    tmp_dir.mkdir(exist_ok=True)
-
-    cmd = [
-        CLAUDE_BIN, "-p", "-",
-        "--output-format", "json",
-        "--dangerously-skip-permissions",
-        "--model", "haiku",
-    ]
-
-    fd, tmp_path = tempfile.mkstemp(suffix=".json", dir=str(tmp_dir))
-    os.close(fd)
-
-    try:
-        with open(tmp_path, "w") as stdout_f:
-            proc = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stdout=stdout_f,
-                stderr=subprocess.PIPE,
-                cwd=str(BASE_DIR),
-            )
-            _, stderr = proc.communicate(input=prompt.encode(), timeout=300)
-
-        with open(tmp_path) as f:
-            raw = f.read().strip()
-
-        if not raw:
-            raise RuntimeError(f"Empty Claude output. stderr: {stderr.decode()[:500]}")
-
-        claude_out = json.loads(raw)
-        if claude_out.get("is_error"):
-            raise RuntimeError(claude_out.get("result", "unknown error"))
-        return claude_out["result"]
-    finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-
-
 def main():
     parser = argparse.ArgumentParser(description="Update research profile from Cortex memory")
     parser.add_argument("--dry-run", action="store_true", help="Show diff without writing")
@@ -130,7 +86,7 @@ def main():
     # Call LLM
     prompt = build_prompt(current_yaml, memories)
     log.info("Calling Claude Code (haiku) to update profile...")
-    new_yaml = call_llm(prompt)
+    new_yaml = run_claude(prompt, model="haiku", timeout=300)
 
     # Strip markdown fences if LLM included them
     if new_yaml.startswith("```"):
@@ -146,6 +102,9 @@ def main():
         sys.exit(1)
 
     # Sanity checks
+    if parsed is None:
+        log.error("LLM returned empty/null YAML, keeping current profile")
+        sys.exit(1)
     if "research_areas" not in parsed or "keywords" not in parsed:
         log.error("LLM output missing required sections")
         sys.exit(1)

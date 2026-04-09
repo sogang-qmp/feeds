@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 
 log = logging.getLogger("feeds")
 
+_GH_BIN = "/home/ywchoi/.local/bin/gh"
+
 
 # Fallback queries when profile has no current_interests or keywords
 _FALLBACK_QUERIES = [
@@ -28,17 +30,21 @@ def generate_queries(profile):
     """
     queries = []
 
-    # 1. Current interests — topics and examples
+    # 1. Current interests — prefer github_queries, fall back to examples
     interests = profile.get("current_interests", []) if profile else []
     high = [ci for ci in interests if ci.get("weight") == "high"]
     medium = [ci for ci in interests if ci.get("weight") != "high"]
     for ci in high + medium:
-        topic = ci.get("topic", "")
-        if topic:
-            queries.append(topic)
-        for ex in ci.get("examples", [])[:2]:
-            queries.append(ex)
-        if len(queries) >= 6:
+        gh_qs = ci.get("github_queries", [])
+        if gh_qs:
+            queries.extend(gh_qs[:2])
+        else:
+            topic = ci.get("topic", "")
+            if topic:
+                queries.append(topic)
+            for ex in ci.get("examples", [])[:2]:
+                queries.append(ex)
+        if len(queries) >= 8:
             break
 
     # 2. Tool/code queries from profile keywords
@@ -139,7 +145,7 @@ def search_github_repos(query, limit=10, sort="stars", created_after=None):
     full_query = f"{query} {qualifier_str}".strip() if qualifier_str else query
 
     cmd = [
-        "gh", "search", "repos", full_query,
+        _GH_BIN, "search", "repos", full_query,
         "--limit", str(limit),
         "--sort", sort,
         "--order", "desc",

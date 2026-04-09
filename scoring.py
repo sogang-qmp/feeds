@@ -52,9 +52,6 @@ def build_profile_text(profile):
             if examples:
                 text += f"    Examples: {', '.join(examples)}\n"
 
-    scoring_prompt = profile.get("scoring_prompt", "")
-    if scoring_prompt:
-        text += f"\nScoring guidance:\n{scoring_prompt}"
     return text
 
 

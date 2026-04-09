@@ -1,5 +1,6 @@
 """HTML generation and deployment for feed pages."""
 
+import html as html_mod
 import logging
 from collections import OrderedDict
 from pathlib import Path
@@ -41,9 +42,9 @@ def _render_rss_section(articles):
             for a in feed_articles:
                 score = a["score"]
                 score_class = f"s{score}"
-                title = a.get("title", "")
-                link = a.get("link", "")
-                authors = a.get("authors", "") or ""
+                title = html_mod.escape(a.get("title", ""))
+                link = html_mod.escape(a.get("link", ""))
+                authors = html_mod.escape(a.get("authors", "") or "")
                 title_html = f'<a href="{link}" target="_blank" rel="noopener">{title}</a>' if link else title
                 author_html = f'<span class="authors">{authors}</span>' if authors else ""
                 rows += (
@@ -79,12 +80,12 @@ def _render_literature_section(recommendations):
 
         items = ""
         for p in papers:
-            title = p.get("title", "")
-            url = p.get("url", "")
-            authors = p.get("authors", "")
-            ref = p.get("ref", "")
+            title = html_mod.escape(p.get("title", ""))
+            url = html_mod.escape(p.get("url", ""))
+            authors = html_mod.escape(p.get("authors", ""))
+            ref = html_mod.escape(p.get("ref", ""))
             year = p.get("year", "")
-            why = p.get("why", "")
+            why = html_mod.escape(p.get("why", ""))
 
             title_html = f'<a href="{url}" target="_blank" rel="noopener">{title}</a>' if url else title
             ref_str = f"{ref} ({year})" if ref else str(year)
@@ -117,11 +118,11 @@ def _render_github_section(articles):
         items = sorted(by_score[score], key=lambda a: a.get("velocity") or 0, reverse=True)
         html += f'<h3 class="score-group">Score {score} <span class="count">({len(items)})</span></h3>\n'
         for a in items:
-            title = a.get("title", "")
-            link = a.get("link", "")
-            description = a.get("summary", "") or a.get("description", "") or ""
+            title = html_mod.escape(a.get("title", ""))
+            link = html_mod.escape(a.get("link", ""))
+            description = html_mod.escape(a.get("summary", "") or a.get("description", "") or "")
             stars = a.get("stars", "")
-            language = a.get("language", "") or ""
+            language = html_mod.escape(a.get("language", "") or "")
             trending = a.get("trending_category", "")
             title_html = f'<a href="{link}" target="_blank" rel="noopener" class="gh-repo">{title}</a>' if link else f'<span class="gh-repo">{title}</span>'
 
@@ -340,13 +341,15 @@ def update_index(out_dir, ga_id="", feeds=None):
     if feeds:
         folders = OrderedDict()
         for f in feeds:
-            folders.setdefault(f["folder"], []).append(f["title"])
+            folders.setdefault(f["folder"], []).append(f)
         feed_rows = ""
-        for folder, titles in folders.items():
+        for folder, feed_list in folders.items():
             if folder:
-                feed_rows += f'<li class="feed-folder">{folder}</li>\n'
-            for t in titles:
-                feed_rows += f"<li>{t}</li>\n"
+                feed_rows += f'<li class="feed-folder">{html_mod.escape(folder)}</li>\n'
+            for f in feed_list:
+                title = html_mod.escape(f["title"])
+                url = html_mod.escape(f["url"])
+                feed_rows += f'<li><a href="{url}" title="RSS feed">{title}</a></li>\n'
         feed_section = f'<h2>Subscribed Feeds ({len(feeds)})</h2>\n<ul class="feed-list">{feed_rows}</ul>'
 
     html = f"""<!DOCTYPE html>

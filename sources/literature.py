@@ -5,8 +5,6 @@ OpenAlex provides free access to scholarly metadata with generous rate limits
 """
 
 import logging
-from datetime import datetime
-
 import requests
 
 log = logging.getLogger("feeds")
@@ -177,65 +175,3 @@ def search_openalex(query, per_page=25, year_from=2024, mailto=MAILTO, sort="rel
     return results
 
 
-def fetch_literature(profile, conn, config=None):
-    """Fetch literature from OpenAlex and insert into DB.
-
-    Args:
-        profile: Research profile dict (from research_profile.yaml)
-        conn: SQLite connection
-        config: Optional config dict for settings
-
-    Returns:
-        Count of new papers inserted
-    """
-    config = config or {}
-    lit_cfg = config.get("literature", {})
-    year_range = lit_cfg.get("year_range", "2024-2026")
-    max_results = lit_cfg.get("max_results_per_query", 25)
-
-    # Parse year_from from year_range like "2024-2026"
-    try:
-        year_from = int(year_range.split("-")[0])
-    except (ValueError, IndexError):
-        year_from = 2024
-
-    queries = generate_queries(profile)
-    log.info(f"[literature] Searching {len(queries)} queries via OpenAlex...")
-
-    inserted = 0
-    for i, query in enumerate(queries):
-        log.info(f"  [{i+1}/{len(queries)}] '{query}'")
-        papers = search_openalex(query, per_page=max_results, year_from=year_from)
-
-        for paper in papers:
-            try:
-                conn.execute(
-                    """INSERT OR IGNORE INTO articles
-                       (link, title, authors, summary, published, fetched_at, curated,
-                        source_type, feed, folder, doi, arxiv_id, citation_count, venue, year)
-                       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        paper["link"],
-                        paper["title"],
-                        paper["authors"],
-                        paper["summary"],
-                        paper["published"],
-                        datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00"),
-                        paper["source_type"],
-                        paper["feed"],
-                        paper["folder"],
-                        paper["doi"],
-                        paper["arxiv_id"],
-                        paper["citation_count"],
-                        paper["venue"],
-                        paper["year"],
-                    ),
-                )
-                if conn.execute("SELECT changes()").fetchone()[0] > 0:
-                    inserted += 1
-            except Exception as e:
-                log.warning(f"[literature] Insert failed: {e}")
-        conn.commit()
-
-    log.info(f"[literature] Done. {inserted} new papers inserted.")
-    return inserted

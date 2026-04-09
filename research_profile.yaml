@@ -1,5 +1,5 @@
 # Research Profile for Job/Conference/Opportunity Recommendation
-# Last updated: 2026-03-23
+# Last updated: 2026-04-09
 # Update method: see comments at bottom
 
 # ============================================================
@@ -16,25 +16,62 @@ researcher:
 # ============================================================
 research_areas:
   primary:
-    - first-principles computational methods
-    - electron-phonon coupling and polaron physics
-    - superconductivity
-    - 2D materials and heterostructures (TMDs, graphene, van der Waals)
+    - charge density waves (CDW) and phase transitions
+    - triple-q CDW and commensurate ordering
+    - CDW energy barriers via nudged elastic band (NEB) calculations
+    - strain-engineered CDW and commensurate lock-in
+    - strain-tuned CDW in van der Waals materials
+    - CDW phase transitions and energy landscapes
+    - 1T-TiSe2 charge density wave physics
+    - PtTe2 strain-tuned CDW and moiré commensurate ordering
+    - DFT+U and hybrid functional methods for CDW
+    - image potential states and surface physics
+    - surface trap states and electronic trapping
+    - coupled-channel solvers and JAX-based implementations
+    - 1D coupled-channel solvers and JAX implementations
+    - 3D coupled-channel solvers (JAX implementation)
+    - Gd2C hydride image potential states and trap states
+    - Gd2CH2 bulk and surface band structure
+    - GW approximation and quasiparticle band structure
+    - Bethe-Salpeter equation (BSE) for excitonic effects
+    - GW-BSE many-body perturbation theory
+    - exciton-phonon coupling in bulk TMDs
+    - polaron physics and multivalley effects in 2D materials
+    - multivalley polaron in transition metal dichalcogenides
+    - electron-phonon coupling and EPW calculations
+    - spectral functions and excitonic properties
+    - polaron self-energy and band renormalization
     - many-body perturbation theory (GW, BSE)
-    - low-dimensional materials and nanostructures
-    - charge density waves (CDW)
-    - surface physics and image potential states
+    - moiré superlattices and commensurate lock-in
+    - moiré phonons in twisted bilayer systems
+    - strain-tuned moiré physics and flat bands
+    - first-principles computational methods
+    - 2D materials and heterostructures (TMDs, graphene, van der Waals)
+    - moiré superlattices and twisted heterostructures
+    - K-dosed and surface-engineered 2D materials
+    - rare-earth hydrides and Gd2C compounds
+    - Claude-assisted and LLM-driven DFT workflow automation
+    - Claude-assisted EPW automation and I/O orchestration
+    - Quantum ESPRESSO and EPW automation with NC pseudopotentials
+    - nudged elastic band (NEB) calculations for CDW
+    - superconductivity
+    - 1D materials and chains (carbon chains, XCN chains, phosphorus nanostructures)
 
   secondary:
     - structural relaxation in moiré systems
-    - Wannier function methods
-    - spectral functions and excitonic properties
+    - Wannier function methods and interpolation
     - rare-earth intermetallics and hydrides
-    - AI-assisted computational automation
+    - low-dimensional materials and nanostructures
     - topological properties
     - strongly correlated materials
-    - polaron calculations and multivalley effects
-    - quasiparticle band structures
+    - optical response calculations
+    - piezoelectricity in layered materials
+    - AI-assisted computational automation and orchestration
+    - slab band structure and surface potential calculations
+    - HSE06 and DFT+U calculations
+    - heterointerface band alignment and doping
+    - van der Waals heterostructures and interfaces
+    - BerkeleyGW implementation
 
   methods:
     - density functional theory (DFT, VASP, Quantum ESPRESSO, SIESTA)
@@ -45,21 +82,30 @@ research_areas:
     - ab initio molecular dynamics
     - nudged elastic band (NEB) calculations
     - machine learning for materials science and DFT automation
-    - polaron calculations via EPW
-    - spectral function and optical response
+    - polaron calculations via EPW and spectral functions
     - HSE06 hybrid functional calculations
+    - DFT+U calculations
     - image potential state calculations
-    - 1D coupled-channel solvers for surface states
+    - 1D and 3D coupled-channel solvers with JAX
+    - Claude/LLM-assisted DFT automation and I/O orchestration
+    - spin-orbit coupling (SOC) calculations
+    - Quantum ESPRESSO EPW automation with NC pseudopotentials
+    - SIESTA DFT and slab calculations
+    - SIESTA structural relaxation
 
   materials_systems:
+    - 1T-TiSe2 and charge density wave phases
+    - PtTe2 charge density wave and strain engineering
     - 2D transition metal dichalcogenides (TMDs: MoS2, WS2, MoTe2, TiSe2, HfS2, ReS2)
     - graphene and moiré superlattices (twisted bilayer graphene, flat bands, twisted MoS2, moiré phonons)
+    - twisted multilayer MoTe2
     - van der Waals heterostructures and interfaces (VSe3-Hf2Se9, ReS2-WS2, Bi2O2Se)
-    - 1D materials (carbon nanotubes, phosphorus nanostructures, XCN chains)
-    - rare-earth compounds (strontium ruthenate Sr2RuO4, GdNiBi2, Gd2C hydrides)
-    - surfaces and image potential states
+    - Bi2O2Se bulk and K-dosed surfaces with conduction band engineering
+    - charge density wave materials
+    - rare-earth compounds (strontium ruthenate Sr2RuO4, GdNiBi2, Gd2C hydrides, Gd2CH2)
+    - Gd2CH2 hydride: bulk band structure, phonons, surface states, image potential states
+    - 1D materials (carbon nanotubes, carbon chains, XCN chains, phosphorus nanostructures)
     - perovskites (MAPbBr3)
-    - charge density wave materials (1T-TiSe2)
     - transition metal pnictides (NiPS3)
 
 # ============================================================
@@ -68,9 +114,55 @@ research_areas:
 keywords:
   # These are used for generous matching — any overlap triggers recommendation
   strong:  # high relevance
-    - electron-phonon
+    - charge density wave
+    - CDW
+    - triple-q CDW
+    - triple-q order
+    - commensurate CDW
+    - commensurate ordering
+    - commensurate lock-in
+    - CDW phase transition
+    - 1T-TiSe2
+    - PtTe2
+    - CDW phonon
+    - strain-engineered CDW
+    - strain-tuned CDW
+    - NEB barrier
+    - NEB calculation
+    - energy barrier
+    - image potential
+    - image potential state
+    - surface states
+    - trap states
+    - surface trap states
+    - coupled-channel solver
+    - 1D coupled-channel solver
+    - 3D coupled-channel solver
+    - JAX numerical solver
+    - JAX-based solver
+    - JAX coupled-channel
+    - JAX surface
+    - Gd2C
+    - Gd2CH2
+    - Gd2C hydride
     - polaron
     - multivalley polaron
+    - polaron self-energy
+    - band renormalization
+    - electron-phonon
+    - electron-phonon coupling
+    - spectral function
+    - EPW
+    - Wannier90
+    - GW approximation
+    - GW quasiparticle
+    - quasiparticle
+    - BSE
+    - Bethe-Salpeter
+    - exciton-phonon coupling
+    - exciton
+    - GW-BSE
+    - many-body perturbation theory
     - superconductor
     - first-principles
     - ab initio
@@ -79,30 +171,52 @@ keywords:
     - condensed matter theory
     - low-dimensional
     - nanostructure
+    - 1D chain
+    - carbon chain
+    - XCN
+    - XCN chain
     - moiré
+    - moire
     - moire phonon
+    - moiré phonon
+    - moire superlattice
+    - moiré superlattice
+    - twisted bilayer
     - flat band
     - graphene
     - 2D materials
     - TMD
+    - TiSe2
     - phonon
     - phonon dispersion
     - BerkeleyGW
-    - GW approximation
-    - BSE
-    - Bethe-Salpeter
-    - Wannier
-    - EPW
-    - spectral function
     - heterostructure
     - van der Waals
-    - charge density wave
-    - CDW
-    - exciton
-    - image potential
-    - surface states
+    - optical response
     - HSE06
     - hybrid functional
+    - DFT+U
+    - phase transition
+    - strain engineering
+    - strain-tuned
+    - Quantum ESPRESSO
+    - Quantum ESPRESSO EPW
+    - QE EPW
+    - QE automation
+    - SIESTA
+    - VASP
+    - K-dosed
+    - K-dosed Bi2O2Se
+    - Bi2O2Se
+    - Claude DFT automation
+    - LLM DFT automation
+    - Claude EPW
+    - Claude computational physics
+    - spin-orbit coupling
+    - SOC
+    - DFT-SOC
+    - quasiparticle band structure
+    - NC pseudopotential
 
   moderate:  # related enough to flag
     - computational physics
@@ -110,15 +224,10 @@ keywords:
     - electronic structure
     - band structure
     - density of states
-    - quasiparticle
-    - optical response
     - many-body
-    - VASP
-    - Quantum ESPRESSO
-    - SIESTA
     - machine learning materials
     - structural relaxation
-    - NEB
+    - structural relaxation moiré
     - transition metal
     - rare-earth
     - intermetallic
@@ -127,9 +236,38 @@ keywords:
     - strongly correlated electrons
     - ab initio automation
     - DFT automation
+    - LLM computational automation
+    - autonomous DFT workflow
+    - AI-driven first-principles
+    - surface physics
+    - surface potential
+    - slab band structure
+    - surface potential calculation
+    - SIESTA slab
+    - SIESTA DFT
     - piezoelectricity
     - perovskite
     - heterointerface
+    - heterointerface band alignment
+    - JAX materials
+    - JAX-based numerical methods
+    - JAX numerical solver
+    - JAX-based DFT
+    - image potential surface states
+    - LLM computational physics
+    - Quantum ESPRESSO phonon
+    - Quantum ESPRESSO automation
+    - QE phonon
+    - VSe3-Hf2Se9
+    - GdNiBi2
+    - NiPS3
+    - phonon properties
+    - moiré superlattice
+    - twisted heterostructure
+    - flat band physics
+    - band engineering
+    - conduction band engineering
+    - pseudopotential DFT
 
   weak:  # broad but still worth seeing
     - quantum materials
@@ -150,26 +288,156 @@ keywords:
 # These get extra weight in scoring and drive query generation.
 # ============================================================
 current_interests:
-  - topic: "AI agents for scientific research"
+  - topic: "charge density waves, commensurate ordering, and NEB energy barriers"
     weight: high
     examples:
+      - "CDW phases in 1T-TiSe2 via DFT+U and NEB"
+      - "triple-q charge density waves and NEB energy barriers"
+      - "strain-tuned CDW in PtTe2 and moiré commensurate lock-in"
+      - "commensurate CDW ordering and strain-induced moiré phonons"
+      - "strain-engineered CDW in van der Waals materials"
+      - "CDW phase transition mechanisms and energy landscapes"
+    github_queries:
+      - "charge density wave DFT"
+      - "CDW phase transition"
+      - "commensurate CDW"
+      - "strain CDW materials"
+      - "triple-q CDW"
+      - "1T-TiSe2"
+      - "DFT+U NEB"
+  - topic: "image potential states, coupled-channel solvers, and JAX numerical methods"
+    weight: high
+    examples:
+      - "JAX-based 1D and 3D coupled-channel solvers for surface states"
+      - "image potential states in Gd2C hydrides"
+      - "surface trap states via coupled-channel method"
+      - "surface potential calculations and band structure convergence"
+      - "Rydberg series from image potential"
+      - "Gd2CH2 surface states and electronic trapping"
+    github_queries:
+      - "image potential states"
+      - "coupled-channel solver"
+      - "JAX numerical solver"
+      - "surface states DFT"
+      - "JAX coupled-channel"
+      - "surface potential"
+      - "JAX surface"
+      - "Gd2C surface"
+  - topic: "AI agents and Claude-assisted scientific automation"
+    weight: high
+    examples:
+      - "Claude-assisted EPW automation and I/O orchestration"
+      - "LLM computational physics workflows"
+      - "autonomous DFT calculation orchestration"
+      - "AI-driven first-principles calculations"
+      - "QE and EPW workflow automation via Claude"
+      - "Quantum ESPRESSO automation with NC pseudopotentials"
+    github_queries:
       - "LLM computational physics"
       - "autonomous DFT workflow"
       - "AI-driven first-principles"
-      - "language model ab initio"
-      - "LLM scientific discovery"
-      - "AI scientist physics"
-      - "autonomous experiment DFT"
-  - topic: "agentic AI and autonomous research workflows"
+      - "Claude DFT automation"
+      - "QE automation"
+      - "Claude EPW"
+      - "Quantum ESPRESSO automation"
+  - topic: "polaron physics and electron-phonon coupling in 2D materials"
     weight: high
     examples:
-      - "Ralph loop, CLAUDE.md-driven research"
-      - "AI grad student model"
-      - "autonomous scientific discovery"
-  - topic: "electron-phonon coupling in 2D materials"
+      - "multivalley polaron in TMDs"
+      - "EPW spectral functions and polaron band renormalization"
+      - "polaron self-energy calculations in 2D"
+      - "electron-phonon coupling via Wannier interpolation"
+      - "Gd2C polaron calculations"
+      - "polaron-phonon dynamics in heterostructures"
+    github_queries:
+      - "electron-phonon coupling python"
+      - "polaron DFT"
+      - "EPW wannier90"
+      - "spectral function EPW"
+      - "multivalley polaron"
+      - "polaron spectral"
+      - "polaron self-energy"
+  - topic: "GW and Bethe-Salpeter equation methods for excitons"
+    weight: high
+    examples:
+      - "quasiparticle band structure via GW-BSE"
+      - "exciton-phonon coupling in TMDs"
+      - "many-body perturbation theory and BSE"
+      - "GW-BSE bulk excitons in 2D materials"
+      - "Bi2O2Se GW quasiparticle renormalization"
+      - "band renormalization from electron-phonon coupling"
+    github_queries:
+      - "GW BerkeleyGW"
+      - "Bethe-Salpeter exciton"
+      - "GW quasiparticle"
+      - "BSE exciton"
+      - "GW band structure"
+      - "GW-BSE"
+      - "quasiparticle renormalization"
+  - topic: "Quantum ESPRESSO, EPW, and phonon-electron systems"
+    weight: high
+    examples:
+      - "Gd2C hydride phonons and band structure via QE"
+      - "EPW electron-phonon in Quantum ESPRESSO"
+      - "NC pseudopotentials and structural relaxation"
+      - "Quantum ESPRESSO automation via Claude"
+      - "QE EPW spectral functions"
+      - "Gd2CH2 bulk and slab calculations with QE"
+    github_queries:
+      - "Quantum ESPRESSO EPW"
+      - "Quantum ESPRESSO phonon"
+      - "EPW calculation"
+      - "QE phonon"
+      - "Gd2CH2"
+      - "Gd2C hydride"
+      - "NC pseudopotential"
+      - "QE slab"
+  - topic: "moiré physics, twisted heterostructures, and flat bands"
+    weight: high
+    examples:
+      - "moiré phonons in twisted bilayer TMDs"
+      - "structural relaxation of twisted MoS2 and MoTe2"
+      - "strain-induced moiré commensurate ordering and CDW"
+      - "flat band engineering in moiré materials"
+      - "PtTe2 strain-induced moiré and CDW commensurate lock-in"
+    github_queries:
+      - "moire superlattice"
+      - "twisted bilayer flat band"
+      - "moire phonon"
+      - "structural relaxation moiré"
+      - "moiré CDW"
+      - "twisted MoTe2"
+      - "strain moiré"
+  - topic: "1D materials and chain systems"
     weight: medium
-  - topic: "moiré physics and flat bands"
+    examples:
+      - "1D XCN chain electronic structure"
+      - "carbon chain properties and stability"
+      - "1D coupled-channel physics and solvers"
+      - "XCN chain band structure and phonons"
+    github_queries:
+      - "1D chain DFT"
+      - "XCN chains"
+      - "XCN chain"
+      - "carbon chain"
+      - "1D electronic structure"
+  - topic: "surface physics, slabs, K-doped materials, and heterointerfaces"
     weight: medium
+    examples:
+      - "SIESTA slab calculations and band structure"
+      - "K-dosed Bi2O2Se surface bands and conduction engineering"
+      - "van der Waals interface engineering and potential alignment"
+      - "image potential surfaces in rare-earth hydrides"
+      - "heterointerface band alignment and doping effects"
+    github_queries:
+      - "slab band structure"
+      - "surface potential DFT"
+      - "heterointerface"
+      - "SIESTA slab"
+      - "K-dosed surface"
+      - "K-dosed Bi2O2Se"
+      - "SIESTA"
+      - "surface band alignment"
 
 # ============================================================
 # Position Types of Interest
